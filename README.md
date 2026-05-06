@@ -176,4 +176,3 @@ redis-cli KEYS "products:*"
 - **Helmet** sets secure HTTP headers; **CORS** restricted to `CLIENT_URL`
 - Production error responses omit stack traces and internal messages
 - All sensitive model fields (`password`, `refreshTokens`, reset tokens) use `select: false`
-# ecommerce-backend-mongodb-redis
