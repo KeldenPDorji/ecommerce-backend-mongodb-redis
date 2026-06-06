@@ -186,7 +186,7 @@ async function main() {
     [{ sku: 'WOM-002', qty: 1 }, { sku: 'WOM-006', qty: 1 }],
   ];
 
-  const createdOrders = [];
+  const createdOrders: Record<string, unknown>[] = [];
   for (let i = 0; i < 20; i++) {
     const userId = customerIds[i % customerIds.length];
     const items = orderItems[i].map(({ sku, qty }) => {
@@ -309,12 +309,12 @@ async function main() {
   // Sorted Set 2 - Monthly buyer leaderboard
   const buyerData = [
     { email: 'carol@xyzshope.com', spend: 2399.97 },
-    { email: 'dave@xyzshope.com',  spend: 1799.94 },
-    { email: 'eve@xyzshope.com',   spend: 1549.93 },
+    { email: 'dave@xyzshope.com', spend: 1799.94 },
+    { email: 'eve@xyzshope.com', spend: 1549.93 },
     { email: 'frank@xyzshope.com', spend: 989.92 },
     { email: 'grace@xyzshope.com', spend: 869.94 },
-    { email: 'hank@xyzshope.com',  spend: 699.98 },
-    { email: 'jack@xyzshope.com',  spend: 449.98 },
+    { email: 'hank@xyzshope.com', spend: 699.98 },
+    { email: 'jack@xyzshope.com', spend: 449.98 },
   ];
   for (const { email, spend } of buyerData) {
     const uid = userMap.get(email)!.toString();
@@ -332,8 +332,8 @@ async function main() {
 
   // HyperLogLog - Unique product page visitors
   const hllProducts = ['LAP-003', 'PHN-002', 'BOK-002'];
-  const sampleIPs = ['192.168.1.1','10.0.0.1','172.16.0.5','203.0.113.42','198.51.100.7',
-                     '203.0.113.1','192.0.2.55','10.10.10.10','8.8.8.8','1.1.1.1'];
+  const sampleIPs = ['192.168.1.1', '10.0.0.1', '172.16.0.5', '203.0.113.42', '198.51.100.7',
+    '203.0.113.1', '192.0.2.55', '10.10.10.10', '8.8.8.8', '1.1.1.1'];
   for (const sku of hllProducts) {
     const id = productMap.get(sku)!._id.toString();
     for (const ip of sampleIPs) await redisService.trackUniqueVisitor(id, ip);
@@ -353,7 +353,7 @@ async function main() {
   const guestCart = {
     items: [
       { productId: productMap.get('BTY-001')!._id.toString(), name: 'Vitamin C Serum', price: 34.99, quantity: 2 },
-      { productId: productMap.get('BOK-002')!._id.toString(), name: 'Atomic Habits',   price: 24.99, quantity: 1 },
+      { productId: productMap.get('BOK-002')!._id.toString(), name: 'Atomic Habits', price: 24.99, quantity: 1 },
     ],
     total: 94.97,
   };
