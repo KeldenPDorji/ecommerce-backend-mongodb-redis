@@ -1,4 +1,4 @@
-# XYZ Shope - E-Commerce Backend
+# Dragon Kingdom Store - E-Commerce Backend
 
 A production-ready REST API for an online retail platform built with **Node.js**, **TypeScript**, **MongoDB 8**, and **Redis 7**.
 
@@ -278,9 +278,9 @@ After running `npm run seed`:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | alice@xyzshope.com | Admin1234! |
-| Seller | bob@xyzshope.com | Seller123! |
-| Customer | carol@xyzshope.com | Customer1! |
+| Admin | alice@dragonkingdom.com | Admin1234! |
+| Seller | bob@dragonkingdom.com | Seller123! |
+| Customer | carol@dragonkingdom.com | Customer1! |
 
 ---
 

@@ -27,16 +27,16 @@ const categoryData = [
 
 // ── User seed data ────────────────────────────────────────────────────────────
 const userData = [
-  { name: 'Alice Admin', email: 'alice@xyzshope.com', password: 'Admin1234!', role: 'admin' as const },
-  { name: 'Bob Seller', email: 'bob@xyzshope.com', password: 'Seller123!', role: 'seller' as const },
-  { name: 'Carol Customer', email: 'carol@xyzshope.com', password: 'Customer1!', role: 'customer' as const },
-  { name: 'Dave Buyer', email: 'dave@xyzshope.com', password: 'Buyer1234!', role: 'customer' as const },
-  { name: 'Eve Shopper', email: 'eve@xyzshope.com', password: 'Shopper12!', role: 'customer' as const },
-  { name: 'Frank User', email: 'frank@xyzshope.com', password: 'Password1!', role: 'customer' as const },
-  { name: 'Grace Green', email: 'grace@xyzshope.com', password: 'Password1!', role: 'customer' as const },
-  { name: 'Hank Hill', email: 'hank@xyzshope.com', password: 'Password1!', role: 'customer' as const },
-  { name: 'Iris Ivanova', email: 'iris@xyzshope.com', password: 'Password1!', role: 'seller' as const },
-  { name: 'Jack Jones', email: 'jack@xyzshope.com', password: 'Password1!', role: 'customer' as const },
+  { name: 'Alice Admin', email: 'alice@dragonkingdom.com', password: 'Admin1234!', role: 'admin' as const },
+  { name: 'Bob Seller', email: 'bob@dragonkingdom.com', password: 'Seller123!', role: 'seller' as const },
+  { name: 'Carol Customer', email: 'carol@dragonkingdom.com', password: 'Customer1!', role: 'customer' as const },
+  { name: 'Dave Buyer', email: 'dave@dragonkingdom.com', password: 'Buyer1234!', role: 'customer' as const },
+  { name: 'Eve Shopper', email: 'eve@dragonkingdom.com', password: 'Shopper12!', role: 'customer' as const },
+  { name: 'Frank User', email: 'frank@dragonkingdom.com', password: 'Password1!', role: 'customer' as const },
+  { name: 'Grace Green', email: 'grace@dragonkingdom.com', password: 'Password1!', role: 'customer' as const },
+  { name: 'Hank Hill', email: 'hank@dragonkingdom.com', password: 'Password1!', role: 'customer' as const },
+  { name: 'Iris Ivanova', email: 'iris@dragonkingdom.com', password: 'Password1!', role: 'seller' as const },
+  { name: 'Jack Jones', email: 'jack@dragonkingdom.com', password: 'Password1!', role: 'customer' as const },
 ];
 
 async function main() {
@@ -153,13 +153,13 @@ async function main() {
 
   // ── Seed 20 orders ───────────────────────────────────────────────────────
   const customerIds = [
-    userMap.get('carol@xyzshope.com')!,
-    userMap.get('dave@xyzshope.com')!,
-    userMap.get('eve@xyzshope.com')!,
-    userMap.get('frank@xyzshope.com')!,
-    userMap.get('grace@xyzshope.com')!,
-    userMap.get('hank@xyzshope.com')!,
-    userMap.get('jack@xyzshope.com')!,
+    userMap.get('carol@dragonkingdom.com')!,
+    userMap.get('dave@dragonkingdom.com')!,
+    userMap.get('eve@dragonkingdom.com')!,
+    userMap.get('frank@dragonkingdom.com')!,
+    userMap.get('grace@dragonkingdom.com')!,
+    userMap.get('hank@dragonkingdom.com')!,
+    userMap.get('jack@dragonkingdom.com')!,
   ];
 
   const orderStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const;
@@ -308,13 +308,13 @@ async function main() {
 
   // Sorted Set 2 - Monthly buyer leaderboard
   const buyerData = [
-    { email: 'carol@xyzshope.com', spend: 2399.97 },
-    { email: 'dave@xyzshope.com', spend: 1799.94 },
-    { email: 'eve@xyzshope.com', spend: 1549.93 },
-    { email: 'frank@xyzshope.com', spend: 989.92 },
-    { email: 'grace@xyzshope.com', spend: 869.94 },
-    { email: 'hank@xyzshope.com', spend: 699.98 },
-    { email: 'jack@xyzshope.com', spend: 449.98 },
+    { email: 'carol@dragonkingdom.com', spend: 2399.97 },
+    { email: 'dave@dragonkingdom.com', spend: 1799.94 },
+    { email: 'eve@dragonkingdom.com', spend: 1549.93 },
+    { email: 'frank@dragonkingdom.com', spend: 989.92 },
+    { email: 'grace@dragonkingdom.com', spend: 869.94 },
+    { email: 'hank@dragonkingdom.com', spend: 699.98 },
+    { email: 'jack@dragonkingdom.com', spend: 449.98 },
   ];
   for (const { email, spend } of buyerData) {
     const uid = userMap.get(email)!.toString();
@@ -323,7 +323,7 @@ async function main() {
   console.log('Seeded leaderboard Sorted Set (7 buyers)');
 
   // List - Recently viewed per user (last 5 viewed products)
-  const carolId = userMap.get('carol@xyzshope.com')!.toString();
+  const carolId = userMap.get('carol@dragonkingdom.com')!.toString();
   const recentProducts = ['LAP-001', 'PHN-002', 'BOK-001', 'SPT-001', 'BTY-001'];
   for (const sku of recentProducts) {
     await redisService.addRecentlyViewed(carolId, productMap.get(sku)!._id.toString());
@@ -342,7 +342,7 @@ async function main() {
 
   // Hash - Demo session
   await redisService.setSession('demo-session-001', {
-    userId: userMap.get('carol@xyzshope.com')!.toString(),
+    userId: userMap.get('carol@dragonkingdom.com')!.toString(),
     role: 'customer',
     name: 'Carol Customer',
     loginAt: new Date().toISOString(),
@@ -361,9 +361,9 @@ async function main() {
   console.log('Seeded guest cart String (demo-guest-abc123)');
 
   console.log('\n✅ Seed complete!');
-  console.log('   Admin  → alice@xyzshope.com / Admin1234!');
-  console.log('   Seller → bob@xyzshope.com   / Seller123!');
-  console.log('   Buyer  → carol@xyzshope.com / Customer1!');
+  console.log('   Admin  → alice@dragonkingdom.com / Admin1234!');
+  console.log('   Seller → bob@dragonkingdom.com   / Seller123!');
+  console.log('   Buyer  → carol@dragonkingdom.com / Customer1!');
 
   await mongoose.disconnect();
   await closeRedis();

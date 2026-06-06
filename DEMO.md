@@ -54,7 +54,7 @@ Scroll to **Auth → POST /auth/login** → **Try it out**
 
 Paste this body:
 ```json
-{ "email": "alice@xyzshope.com", "password": "Admin1234!" }
+{ "email": "alice@dragonkingdom.com", "password": "Admin1234!" }
 ```
 
 Execute → copy the `accessToken` value from the response.
@@ -187,6 +187,6 @@ The numbers match what Swagger returned in Step 5 - proving the API is reading s
 
 | Role     | Email                  | Password      |
 |----------|------------------------|---------------|
-| Admin    | alice@xyzshope.com     | Admin1234!    |
-| Seller   | bob@xyzshope.com       | Seller123!    |
-| Customer | carol@xyzshope.com     | Customer1!    |
+| Admin    | alice@dragonkingdom.com     | Admin1234!    |
+| Seller   | bob@dragonkingdom.com       | Seller123!    |
+| Customer | carol@dragonkingdom.com     | Customer1!    |

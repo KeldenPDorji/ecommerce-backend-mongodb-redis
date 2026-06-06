@@ -4,7 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 const spec = {
   openapi: '3.0.3',
   info: {
-    title: 'XYZ Shope API',
+    title: 'Dragon Kingdom Store API',
     version: '1.0.0',
     description:
       'E-Commerce REST API — DBS302 Assignment. MongoDB 8 (replica set, ACID transactions, aggregation pipelines, text indexes) + Redis 7 (Sorted Set, List, HyperLogLog, Hash, String).',
@@ -100,7 +100,7 @@ const spec = {
                 type: 'object',
                 required: ['email', 'password'],
                 properties: {
-                  email:    { type: 'string', example: 'carol@xyzshope.com' },
+                  email:    { type: 'string', example: 'carol@dragonkingdom.com' },
                   password: { type: 'string', example: 'Customer1!' },
                 },
               },
@@ -692,7 +692,7 @@ export function setupSwagger(app: Express): void {
     '/api-docs',
     swaggerUi.serve,
     swaggerUi.setup(spec, {
-      customSiteTitle: 'XYZ Shope API - DBS302',
+      customSiteTitle: 'Dragon Kingdom Store API - DBS302',
       swaggerOptions: { persistAuthorization: true },
     })
   );

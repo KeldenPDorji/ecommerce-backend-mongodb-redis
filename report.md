@@ -1,8 +1,8 @@
-# Technical Report - XYZ Shope E-Commerce Backend
+# Technical Report - Dragon Kingdom Store E-Commerce Backend
 
 ## Abstract
 
-This report documents the design and implementation of the backend data layer for *XYZ Shope*, a fictional fast-growing online retailer. The system uses **MongoDB 8** as the primary document store for persistent data and **Redis 7** as an in-memory layer for caching, sessions, real-time analytics, and rate limiting. The two databases are chosen for complementary reasons: MongoDB's flexible document model accommodates a heterogeneous product catalogue and supports ACID multi-document transactions for order placement; Redis's sub-millisecond latency and rich data-structure set enable real-time features that would be prohibitively expensive to run against MongoDB. All design decisions are justified against the CAP theorem, the system's non-functional requirements, and real-world operational concerns.
+This report documents the design and implementation of the backend data layer for *Dragon Kingdom Store*, a fictional fast-growing online retailer. The system uses **MongoDB 8** as the primary document store for persistent data and **Redis 7** as an in-memory layer for caching, sessions, real-time analytics, and rate limiting. The two databases are chosen for complementary reasons: MongoDB's flexible document model accommodates a heterogeneous product catalogue and supports ACID multi-document transactions for order placement; Redis's sub-millisecond latency and rich data-structure set enable real-time features that would be prohibitively expensive to run against MongoDB. All design decisions are justified against the CAP theorem, the system's non-functional requirements, and real-world operational concerns.
 
 ---
 
