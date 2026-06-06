@@ -4,11 +4,13 @@ import mongoose from 'mongoose';
 import { Order, OrderStatus } from '../models/Order';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
+import { Inventory } from '../models/Inventory';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AuthRequest } from '../middleware/auth';
 import { sendOrderConfirmation } from '../services/email.service';
 import { User } from '../models/User';
+import { redisService } from '../services/redis.service';
 
 export const placeOrderSchema = z.object({
   shippingAddress: z.object({
@@ -97,6 +99,24 @@ export const placeOrder = asyncHandler(async (req: AuthRequest, res: Response) =
 
     await session.commitTransaction();
 
+    // Post-commit: write inventory events + update Redis leaderboard (fire-and-forget)
+    const inventoryEvents = orderItems.map((item) => ({
+      product: item.product,
+      sku: '',
+      delta: -item.quantity,
+      reason: 'sale' as const,
+      reference: order._id,
+      stockAfter: 0,
+    }));
+    void Inventory.insertMany(inventoryEvents).catch(() => null);
+    void redisService.recordPurchase(String(req.userId), totalPrice).catch(() => null);
+    // Boost trending score on purchase (weighted 5× vs a view)
+    void Promise.all(
+      orderItems.map((item) =>
+        redisService.incrementTrendingScore(String(item.product), 5).catch(() => null)
+      )
+    );
+
     const user = await User.findById(req.userId).select('email');
     if (user) await sendOrderConfirmation(user.email, String(order._id));
 
@@ -170,6 +190,19 @@ export const cancelOrder = asyncHandler(async (req: AuthRequest, res: Response) 
     }
     await Order.findByIdAndUpdate(order._id, { status: 'cancelled' }, { session });
     await session.commitTransaction();
+
+    // Log inventory restoration
+    void Inventory.insertMany(
+      order.items.map((item) => ({
+        product: item.product,
+        sku: '',
+        delta: item.quantity,
+        reason: 'return' as const,
+        reference: order._id,
+        stockAfter: 0,
+      }))
+    ).catch(() => null);
+
     res.json({ success: true, message: 'Order cancelled' });
   } catch (err) {
     await session.abortTransaction();

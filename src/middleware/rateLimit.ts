@@ -25,3 +25,16 @@ export const authLimiter = rateLimit({
   }),
   message: { success: false, message: 'Too many auth attempts, please try again in 15 minutes.' },
 });
+
+// Tight limiter for checkout — prevents cart-stuffing / order-spam
+export const checkoutLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new RedisStore({
+    sendCommand: (...args: string[]) => getRedis().call(...args as [string, ...string[]]) as Promise<number>,
+    prefix: 'checkout_rl:',
+  }),
+  message: { success: false, message: 'Too many checkout attempts, please try again later.' },
+});

@@ -4,6 +4,8 @@ import { Product } from '../models/Product';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { cache } from '../services/cache.service';
+import { redisService } from '../services/redis.service';
+import { AuthRequest } from '../middleware/auth';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 export const createProductSchema = z.object({
@@ -77,19 +79,58 @@ export const listProducts = asyncHandler(async (req: Request, res: Response) => 
   res.json(result);
 });
 
-export const getProduct = asyncHandler(async (req: Request, res: Response) => {
+export const getProduct = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const cacheKey = cache.productKey(id);
 
   const cached = await cache.get(cacheKey);
-  if (cached) { res.json(cached); return; }
+  if (cached) {
+    // Still fire tracking for cache hits (fire-and-forget)
+    const identifier = req.userId ?? (req.ip ?? 'anon');
+    void Promise.all([
+      redisService.incrementTrendingScore(id, 1),
+      redisService.trackUniqueVisitor(id, identifier),
+      req.userId ? redisService.addRecentlyViewed(req.userId, id) : Promise.resolve(),
+    ]);
+    res.json(cached);
+    return;
+  }
 
   const product = await Product.findOne({ _id: id, isActive: true }).populate('category', 'name slug');
   if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND');
 
+  // Fire Redis tracking (non-blocking)
+  const identifier = req.userId ?? (req.ip ?? 'anon');
+  void Promise.all([
+    redisService.incrementTrendingScore(id, 1),
+    redisService.trackUniqueVisitor(id, identifier),
+    req.userId ? redisService.addRecentlyViewed(req.userId, id) : Promise.resolve(),
+  ]);
+
   const result = { success: true, data: product };
   await cache.set(cacheKey, result, 600);
   res.json(result);
+});
+
+export const getRecentlyViewed = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids = await redisService.getRecentlyViewed(req.userId!);
+  if (!ids.length) { res.json({ success: true, data: [] }); return; }
+
+  const products = await Product.find({ _id: { $in: ids }, isActive: true })
+    .select('name slug price images averageRating')
+    .populate('category', 'name');
+
+  // Preserve recency order from Redis list
+  const map = new Map(products.map((p) => [String(p._id), p]));
+  const ordered = ids.map((id) => map.get(id)).filter(Boolean);
+
+  res.json({ success: true, data: ordered });
+});
+
+export const getUniqueVisitorCount = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const count = await redisService.countUniqueVisitors(id);
+  res.json({ success: true, productId: id, uniqueVisitors: count });
 });
 
 export const createProduct = asyncHandler(async (req: Request, res: Response) => {

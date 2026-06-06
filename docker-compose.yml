@@ -1,0 +1,179 @@
+version: "3.9"
+
+# ── XYZ Shope — Production-style local stack ─────────────────────────────────
+#
+# MongoDB: 3-node replica set  (mongo1 = primary, mongo2 + mongo3 = secondaries)
+# Redis:   master + replica + 3 Sentinel nodes for HA
+# App:     Express/TypeScript API
+#
+# Usage:
+#   docker compose up -d              # start everything
+#   docker compose exec mongo1 bash   # open primary shell
+#   docker compose exec redis-master redis-cli -a ${REDIS_PASSWORD:-}
+#
+# NOTE: On first run, execute the replica-set init:
+#   docker compose exec mongo1 mongosh --eval 'load("/docker-entrypoint-initdb.d/rs-init.js")'
+
+networks:
+  shop-net:
+    driver: bridge
+
+volumes:
+  mongo1-data:
+  mongo2-data:
+  mongo3-data:
+  redis-master-data:
+  redis-replica-data:
+
+# ── MongoDB Replica Set ───────────────────────────────────────────────────────
+services:
+  mongo1:
+    image: mongo:8.0
+    container_name: mongo1
+    hostname: mongo1
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mongo1-data:/data/db
+      - ./docker/mongo-keyfile:/etc/mongo/keyfile:ro
+      - ./docker/rs-init.js:/docker-entrypoint-initdb.d/rs-init.js:ro
+    networks:
+      - shop-net
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo2:
+    image: mongo:8.0
+    container_name: mongo2
+    hostname: mongo2
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mongo2-data:/data/db
+      - ./docker/mongo-keyfile:/etc/mongo/keyfile:ro
+    networks:
+      - shop-net
+    depends_on:
+      - mongo1
+
+  mongo3:
+    image: mongo:8.0
+    container_name: mongo3
+    hostname: mongo3
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mongo3-data:/data/db
+      - ./docker/mongo-keyfile:/etc/mongo/keyfile:ro
+    networks:
+      - shop-net
+    depends_on:
+      - mongo1
+
+# ── Redis Master + Replica ────────────────────────────────────────────────────
+  redis-master:
+    image: redis:7.2-alpine
+    container_name: redis-master
+    hostname: redis-master
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis-master-data:/data
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - shop-net
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis-replica:
+    image: redis:7.2-alpine
+    container_name: redis-replica
+    hostname: redis-replica
+    restart: unless-stopped
+    command: ["redis-server", "--replicaof", "redis-master", "6379", "--save", ""]
+    volumes:
+      - redis-replica-data:/data
+    networks:
+      - shop-net
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+# ── Redis Sentinel (HA) ────────────────────────────────────────────────────────
+  sentinel1:
+    image: redis:7.2-alpine
+    container_name: sentinel1
+    restart: unless-stopped
+    command: ["redis-sentinel", "/usr/local/etc/redis/sentinel.conf"]
+    volumes:
+      - ./docker/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - shop-net
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  sentinel2:
+    image: redis:7.2-alpine
+    container_name: sentinel2
+    restart: unless-stopped
+    command: ["redis-sentinel", "/usr/local/etc/redis/sentinel.conf"]
+    volumes:
+      - ./docker/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - shop-net
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  sentinel3:
+    image: redis:7.2-alpine
+    container_name: sentinel3
+    restart: unless-stopped
+    command: ["redis-sentinel", "/usr/local/etc/redis/sentinel.conf"]
+    volumes:
+      - ./docker/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - shop-net
+    depends_on:
+      - redis-master
+      - redis-replica
+
+# ── Application ───────────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: xyzshope-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGODB_URI: "mongodb://root:rootpassword@mongo1:27017,mongo2:27017,mongo3:27017/ecommerce?authSource=admin&replicaSet=rs0"
+      REDIS_HOST: redis-master
+      REDIS_PORT: "6379"
+    ports:
+      - "5001:5001"
+    networks:
+      - shop-net
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy

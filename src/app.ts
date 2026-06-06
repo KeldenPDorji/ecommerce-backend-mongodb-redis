@@ -9,15 +9,34 @@ import { globalLimiter } from './middleware/rateLimit';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 
+import { setupSwagger } from './config/swagger';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import cartRoutes from './routes/cart.routes';
 import orderRoutes from './routes/order.routes';
+import categoryRoutes from './routes/category.routes';
+import reviewRoutes from './routes/review.routes';
+import analyticsRoutes from './routes/analytics.routes';
+import userRoutes from './routes/user.routes';
 
 const app = express();
 
+// ── Swagger UI (before helmet so CSP doesn't block assets) ────────────────
+setupSwagger(app);
+
 // ── Security ───────────────────────────────────────────────────────────────
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc:  ["'self'", "'unsafe-inline'"],
+        styleSrc:   ["'self'", "'unsafe-inline'"],
+        imgSrc:     ["'self'", 'data:', 'https:'],
+      },
+    },
+  })
+);
 app.use(cors({
   origin: env.CLIENT_URL,
   credentials: true,
@@ -48,8 +67,12 @@ app.get('/health', (_req, res) => {
 // ── API routes ─────────────────────────────────────────────────────────────
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/products/:productId/reviews', reviewRoutes);
 app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
+app.use('/api/v1/categories', categoryRoutes);
+app.use('/api/v1/analytics', analyticsRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // ── Error handling ─────────────────────────────────────────────────────────
 app.use(notFound);

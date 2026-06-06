@@ -6,11 +6,22 @@ import {
   addItem, addItemSchema,
   updateItem, updateItemSchema,
   clearCart,
+  getGuestCart,
+  addGuestItem,
+  updateGuestItem,
+  clearGuestCart,
 } from '../controllers/cart.controller';
 
 const router = Router();
-router.use(authenticate);
 
+// ── Guest cart (no auth required) ───────────────────────────────────────────
+router.get('/guest', getGuestCart);
+router.post('/guest/items', validate(addItemSchema), addGuestItem);
+router.patch('/guest/items/:productId', validate(updateItemSchema), updateGuestItem);
+router.delete('/guest', clearGuestCart);
+
+// ── Authenticated cart ───────────────────────────────────────────────────────
+router.use(authenticate);
 router.get('/', getCart);
 router.post('/items', validate(addItemSchema), addItem);
 router.patch('/items/:productId', validate(updateItemSchema), updateItem);
