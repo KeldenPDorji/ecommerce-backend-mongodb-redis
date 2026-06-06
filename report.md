@@ -1,8 +1,8 @@
-# Technical Report — XYZ Shope E-Commerce Backend
+# Technical Report - XYZ Shope E-Commerce Backend
 
 | | |
 |---|---|
-| **Module** | DBS302 — Database Systems |
+| **Module** | DBS302 - Database Systems |
 | **Assignment** | Production-Ready E-Commerce Backend with MongoDB and Redis |
 | **Date** | June 2026 |
 | **Repository** | github.com/KeldenDrac/E-Commerce |
@@ -36,17 +36,19 @@ This report documents the design and implementation of the backend data layer fo
     ┌────────────▼──────────────┐    ┌────────────▼──────────────────┐
     │   MongoDB 8  (Mongoose)   │    │      Redis 7  (ioredis)        │
     │                           │    │                               │
-    │  Collections:             │    │  String  — cache, rate limit  │
-    │   users                   │    │  Sorted Set — trending,        │
+    │  Collections:             │    │  String  - cache, rate limit  │
+    │   users                   │    │  Sorted Set - trending,        │
     │   products                │    │              leaderboard       │
-    │   categories              │    │  List    — recently viewed    │
-    │   orders                  │    │  HyperLogLog — unique visits  │
-    │   reviews                 │    │  Hash    — sessions,          │
+    │   categories              │    │  List    - recently viewed    │
+    │   orders                  │    │  HyperLogLog - unique visits  │
+    │   reviews                 │    │  Hash    - sessions,          │
     │   inventory               │    │            guest carts        │
     │                           │    │                               │
     │  Replica Set (3 nodes)    │    │  Master + Replica + Sentinel  │
     └───────────────────────────┘    └───────────────────────────────┘
 ```
+
+![Swagger UI - full endpoint overview](docs/swagger-overview.png)
 
 **Request flow (product detail, cache-hit path):**
 
@@ -72,11 +74,11 @@ This report documents the design and implementation of the backend data layer fo
 
 | Requirement | How MongoDB satisfies it |
 |---|---|
-| Heterogeneous product attributes (laptop RAM vs shirt fabric) | Document model + `attributes: Map<string, string>` — no schema migration needed when new attribute types appear |
+| Heterogeneous product attributes (laptop RAM vs shirt fabric) | Document model + `attributes: Map<string, string>` - no schema migration needed when new attribute types appear |
 | ACID order placement with stock decrement | Multi-document sessions and transactions (available since MongoDB 4.0) |
 | Full-text product search | Built-in text indexes on `name`, `description`, `tags` |
-| Analytical queries (revenue, top products) | Aggregation pipeline — expressive, server-side, index-aware |
-| Embedded sub-documents (order items, addresses) | Avoids JOINs; order items are immutable snapshots — perfect for embedding |
+| Analytical queries (revenue, top products) | Aggregation pipeline - expressive, server-side, index-aware |
+| Embedded sub-documents (order items, addresses) | Avoids JOINs; order items are immutable snapshots - perfect for embedding |
 | Scalable reads during flash sales | Replica set secondaries can serve reads; horizontal sharding for writes |
 
 **CAP position:** MongoDB operates in the **CP** space by default. With `writeConcern: majority` the system tolerates a primary failure and still guarantees no acknowledged write is lost. Read-after-write consistency is achieved by routing reads to the primary.
@@ -86,12 +88,12 @@ This report documents the design and implementation of the backend data layer fo
 | Requirement | How Redis satisfies it |
 |---|---|
 | Sub-millisecond hot-path reads (product page, homepage) | In-memory String cache with jittered TTL |
-| Rate limiting without DB overhead | Atomic `INCR` / `EXPIRE` — no race conditions |
-| Real-time trending products | `ZINCRBY` on every product view — O(log N) update |
-| Recently viewed per user | `LPUSH` + `LTRIM` list — always capped at 20 items |
-| Unique visitor counting at scale | HyperLogLog — O(1) space (12 KB per key) for ~0.81% error |
-| Session management | Hash with TTL — low-latency session lookup, field-level granularity |
-| Guest cart with automatic expiry | String (JSON) with `EX` — TTL-based cleanup at no extra cost |
+| Rate limiting without DB overhead | Atomic `INCR` / `EXPIRE` - no race conditions |
+| Real-time trending products | `ZINCRBY` on every product view - O(log N) update |
+| Recently viewed per user | `LPUSH` + `LTRIM` list - always capped at 20 items |
+| Unique visitor counting at scale | HyperLogLog - O(1) space (12 KB per key) for ~0.81% error |
+| Session management | Hash with TTL - low-latency session lookup, field-level granularity |
+| Guest cart with automatic expiry | String (JSON) with `EX` - TTL-based cleanup at no extra cost |
 
 **CAP position:** Redis in standalone mode is **AP**. With Redis Sentinel the system achieves automatic failover in ~5 seconds, accepting brief inconsistency windows during the election. For rate-limit counters a brief inconsistency is acceptable; for critical session data the primary is always the writer.
 
@@ -122,7 +124,7 @@ MongoDB handles **durable, relational, transactional** data. Redis handles **eph
 
 **Embedding decision:** Addresses and paymentPreferences are embedded because they are always fetched with the user profile (no benefit to a separate collection), the number of addresses per user is bounded (< 10), and they have no independent lifecycle outside the user document.
 
-**Wishlist** uses an array of `ObjectId` references to `products`. A wishlist can contain many products over time, and product documents are large (description, images, attributes) — full embedding would inflate the user document unacceptably. A reference keeps the user document lean and allows the product catalogue to be updated independently.
+**Wishlist** uses an array of `ObjectId` references to `products`. A wishlist can contain many products over time, and product documents are large (description, images, attributes) - full embedding would inflate the user document unacceptably. A reference keeps the user document lean and allows the product catalogue to be updated independently.
 
 #### 3.1.2 `products`
 
@@ -139,7 +141,7 @@ MongoDB handles **durable, relational, transactional** data. Redis handles **eph
 
 **Embedding decision:** `category` is a reference because categories exist independently, are reused across thousands of products, and are queried independently. Embedding would duplicate the category name on every product, complicating updates.
 
-**`attributes: Map<string, string>`** — a schema-less key/value map accommodates the polymorphic nature of product attributes (a laptop has "RAM"; a dress has "fabric"). This satisfies LO1 by demonstrating a polymorphic embedded structure.
+**`attributes: Map<string, string>`** - a schema-less key/value map accommodates the polymorphic nature of product attributes (a laptop has "RAM"; a dress has "fabric"). This satisfies LO1 by demonstrating a polymorphic embedded structure.
 
 #### 3.1.3 `categories`
 
@@ -163,7 +165,7 @@ Self-referencing `parent` enables unlimited category depth (e.g., Electronics �
 }
 ```
 
-**Embedding decision:** Order line items are **embedded** as immutable snapshots. Product prices can change after an order is placed — embedding locks in the price at time of purchase. This is the canonical approach for order systems and eliminates an expensive `$lookup` on every order read.
+**Embedding decision:** Order line items are **embedded** as immutable snapshots. Product prices can change after an order is placed - embedding locks in the price at time of purchase. This is the canonical approach for order systems and eliminates an expensive `$lookup` on every order read.
 
 `shippingAddress` is also embedded for the same reason: it must reflect the address used at the time of purchase, not the user's current address.
 
@@ -178,7 +180,7 @@ Self-referencing `parent` enables unlimited category depth (e.g., Electronics �
 ```
 
 Reviews are a separate collection (not embedded in products) because:
-- A product may have thousands of reviews — embedding would create unbounded document growth.
+- A product may have thousands of reviews - embedding would create unbounded document growth.
 - Reviews are paginated independently.
 - The `post('save')` hook automatically recomputes `averageRating` and `numReviews` on the product after each review write.
 
@@ -202,11 +204,11 @@ An append-only event log rather than a mutable stock field. Every stock movement
 
 | Index | Collection | Type | Justification |
 |---|---|---|---|
-| `{ email: 1 }` | users | Unique | Login lookup — every auth request queries by email |
+| `{ email: 1 }` | users | Unique | Login lookup - every auth request queries by email |
 | `{ name: "text", description: "text", tags: "text" }` | products | Text | Full-text search on product listings |
 | `{ category: 1, isActive: 1 }` | products | Compound | Filters by category + active status simultaneously (category browse) |
 | `{ price: 1 }` | products | Single | Price range filtering and sort |
-| `{ user: 1, createdAt: -1 }` | orders | Compound | "My orders" query — sort by recency for a specific user |
+| `{ user: 1, createdAt: -1 }` | orders | Compound | "My orders" query - sort by recency for a specific user |
 | `{ status: 1 }` | orders | Single | Admin order management filtered by status |
 | `{ product: 1, user: 1 }` | reviews | Compound Unique | Enforces one review per user per product; also fast lookup |
 | `{ product: 1, rating: -1 }` | reviews | Compound | Sort reviews by rating within a product |
@@ -218,6 +220,8 @@ An append-only event log rather than a mutable stock field. Every stock movement
 db.products.find({ category: ObjectId("..."), isActive: true }).explain("executionStats")
 // winningPlan: IXSCAN { category_1_isActive_1 }
 ```
+
+![MongoDB explain plan - IXSCAN confirmed](docs/mongo-explain.png)
 
 ---
 
@@ -263,11 +267,13 @@ All product reads first check Redis (`product:{id}` or `products:list:{queryHash
 
 **Authenticated cart:** Persisted in MongoDB's `carts` collection. The pre-save hook recalculates `totalPrice` to prevent price manipulation. Cart is cleared within the same transaction as the order creation.
 
-**Guest cart:** Stored in Redis as a JSON string at `guest:cart:{guestId}` with a 24-hour TTL. A `guestId` cookie (httpOnly, sameSite=lax) is set on first cart interaction. When a guest logs in, the application can merge the guest cart into the authenticated MongoDB cart. The Redis key expires automatically after 24 hours of inactivity — no cleanup job required.
+**Guest cart:** Stored in Redis as a JSON string at `guest:cart:{guestId}` with a 24-hour TTL. A `guestId` cookie (httpOnly, sameSite=lax) is set on first cart interaction. When a guest logs in, the application can merge the guest cart into the authenticated MongoDB cart. The Redis key expires automatically after 24 hours of inactivity - no cleanup job required.
 
 **Session management (Redis Hash):** Post-login sessions can be stored in Redis Hashes (`session:{sessionId}`) with a 7-day TTL. `HSET` allows individual field updates (e.g., `lastActive`) without deserialising the entire session.
 
 ### 4.4 Order Processing
+
+![POST /orders - ACID transaction response (201 Created)](docs/swagger-order.png)
 
 Order placement uses a **MongoDB multi-document ACID transaction**:
 
@@ -285,6 +291,8 @@ Cancellation reverses the stock decrement via a separate transaction and appends
 
 ### 4.5 Real-Time Features
 
+![Redis data types - all 5 namespaces in KEYS output](docs/redis-datatypes.png)
+
 **Top 10 Trending Products (Sorted Set):**
 - On every product view: `ZINCRBY trending:products 1 {productId}` (O(log N))
 - On order placement: `ZINCRBY trending:products 5 {productId}` (purchases weighted 5×)
@@ -298,9 +306,11 @@ Cancellation reverses the stock decrement via a separate transaction and appends
 - Post order commit: `ZINCRBY leaderboard:buyers:{YYYY-MM} {totalPrice} {userId}`
 - `GET /api/v1/analytics/leaderboard/buyers` returns top 10 with `ZREVRANGEBYSCORE`.
 
+![Redis Sorted Set - trending:products ZREVRANGE with scores](docs/redis-sorted-set.png)
+
 **Unique Visitors (HyperLogLog):**
 - On every product view: `PFADD product:views:unique:{productId} {userId|IP}`
-- `GET /api/v1/products/:id/unique-visitors` calls `PFCOUNT` — returns approximate count in O(1) space.
+- `GET /api/v1/products/:id/unique-visitors` calls `PFCOUNT` - returns approximate count in O(1) space.
 
 **Rate Limiting:**
 - Global: 100 req / 15 min per IP (Redis-backed `express-rate-limit`)
@@ -308,6 +318,8 @@ Cancellation reverses the stock decrement via a separate transaction and appends
 - Checkout: 20 req / 1 hour (cart-stuffing prevention)
 
 ### 4.6 Analytics and Reporting
+
+![Monthly revenue aggregation pipeline response](docs/swagger-monthly.png)
 
 **Monthly Revenue Pipeline:**
 ```js
@@ -346,7 +358,7 @@ All analytics endpoints cache results in Redis for 30–60 minutes to avoid re-r
 
 ## 5. Non-Functional Requirements
 
-### NFR1 — Performance
+### NFR1 - Performance
 
 Hot read paths (product detail, product listing, categories, analytics) are served from Redis cache.
 
@@ -358,42 +370,44 @@ Hot read paths (product detail, product listing, categories, analytics) are serv
 
 Cache-hit ratios for product detail typically exceed 95% under steady traffic (TTL 10 min, writes infrequent). Jittered TTLs prevent simultaneous expiry of many cached keys.
 
-### NFR2 — Scalability (Sharding Plan)
+### NFR2 - Scalability (Sharding Plan)
 
 | Collection | Shard Key Candidate | Justification |
 |---|---|---|
-| `products` | `{ category: 1, _id: 1 }` | Products are browsed by category — co-locating same-category products on a shard reduces cross-shard queries during category listings |
-| `orders` | `{ user: 1, createdAt: 1 }` | Most order queries filter by user — keeps all orders for a user on one shard; hashed `user` prevents hot-spots for high-volume customers |
+| `products` | `{ category: 1, _id: 1 }` | Products are browsed by category - co-locating same-category products on a shard reduces cross-shard queries during category listings |
+| `orders` | `{ user: 1, createdAt: 1 }` | Most order queries filter by user - keeps all orders for a user on one shard; hashed `user` prevents hot-spots for high-volume customers |
 | `inventory` | `{ product: 1 }` | Inventory history queries are always product-scoped |
 | `reviews` | `{ product: 1 }` | Review lists are product-scoped |
 
 **Note:** `users` and `categories` are small collections and should remain unsharded or use `{ _id: 1 }` hashed sharding. Sharding requires MongoDB 6+ and is configured via `sh.enableSharding("ecommerce")` and `sh.shardCollection(...)`.
 
-### NFR3 — High Availability
+### NFR3 - High Availability
 
-**MongoDB:** 3-node replica set (`rs0`). Primary handles all writes. Both secondaries can become the new primary via election. With `writeConcern: { w: "majority" }`, an acknowledged write has been replicated to at least 2 nodes before confirmation — surviving a single-node failure. Automatic failover completes within ~10 seconds.
+![MongoDB replica set status - 3 nodes healthy](docs/mongo-rs-status.png)
+
+**MongoDB:** 3-node replica set (`rs0`). Primary handles all writes. Both secondaries can become the new primary via election. With `writeConcern: { w: "majority" }`, an acknowledged write has been replicated to at least 2 nodes before confirmation - surviving a single-node failure. Automatic failover completes within ~10 seconds.
 
 **Redis:** Master + 1 replica + 3 Sentinel nodes. Sentinels monitor the master (quorum = 2). On master failure, Sentinels elect the replica as the new master within ~5 seconds. Application uses ioredis which auto-reconnects.
 
-### NFR4 — Consistency
+### NFR4 - Consistency
 
 **MongoDB Read/Write Concerns:**
 - **Write concern `majority`** is used for all business-critical writes (order creation, stock decrement). An acknowledged write is guaranteed not to be rolled back even if the primary fails.
-- **Read concern `local`** is used for general reads (product listings, user profile). This returns the most recent data on the node without waiting for majority replication — acceptable for catalogue data where brief staleness is tolerable.
+- **Read concern `local`** is used for general reads (product listings, user profile). This returns the most recent data on the node without waiting for majority replication - acceptable for catalogue data where brief staleness is tolerable.
 - **Read concern `majority`** is used in transactions (order placement) to ensure reads within the transaction see only committed data.
 
 **CAP trade-off:** The system sits in the **CP** zone. During a network partition, the system will refuse writes rather than risk divergent state. For an e-commerce platform, consistency (no overselling, no lost orders) is more valuable than availability of the write path.
 
-### NFR5 — Durability
+### NFR5 - Durability
 
 **Redis Hybrid Persistence (RDB + AOF):**
 - **RDB snapshots** (`save 900 1; save 300 10; save 60 10000`): fast restart, compact file.
 - **AOF** (`appendfsync everysec`): each write is fsynced at most every 1 second. Maximum data loss on crash = 1 second.
 - **Hybrid mode** (`aof-use-rdb-preamble yes`): the AOF file starts with an RDB snapshot for fast load, followed by incremental AOF entries.
 
-**Justification for `appendfsync everysec` over `always`:** `always` would fsync on every Redis write command, reducing throughput by ~10–100×. For a cache layer, losing 1 second of data is acceptable — the source of truth is MongoDB.
+**Justification for `appendfsync everysec` over `always`:** `always` would fsync on every Redis write command, reducing throughput by ~10–100×. For a cache layer, losing 1 second of data is acceptable - the source of truth is MongoDB.
 
-### NFR6 — Security
+### NFR6 - Security
 
 - Passwords hashed with **bcrypt** cost factor 12 (never stored as plaintext).
 - JWT access tokens expire in **15 minutes**; refresh tokens in **7 days** with rotation.
@@ -401,24 +415,24 @@ Cache-hit ratios for product detail typically exceed 95% under steady traffic (T
 - **Helmet** sets `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`, etc.
 - **CORS** restricted to `CLIENT_URL` env variable; `credentials: true` for cookie support.
 - Request bodies capped at **10 KB** (DoS mitigation).
-- Redis `protected-mode no` is only disabled within the Docker internal network — external access requires a firewall rule.
-- MongoDB root credentials are not hardcoded — provided via environment variables.
+- Redis `protected-mode no` is only disabled within the Docker internal network - external access requires a firewall rule.
+- MongoDB root credentials are not hardcoded - provided via environment variables.
 - `.env` is listed in `.gitignore`; `.env.example` contains placeholder values only.
 
-### NFR7 — Observability
+### NFR7 - Observability
 
 - **Winston** structured logging at `debug` (dev) and `info` (prod) levels.
 - **Morgan** HTTP access log piped to Winston.
 - **Redis slow log** (`slowlog-log-slower-than 10000`) captures commands taking > 10 ms.
-- **MongoDB slow query log** enabled via `db.setProfilingLevel(1, { slowms: 100 })` — logs queries over 100 ms to `system.profile`.
+- **MongoDB slow query log** enabled via `db.setProfilingLevel(1, { slowms: 100 })` - logs queries over 100 ms to `system.profile`.
 - Redis `INFO` statistics (memory, keyspace hits/misses, connected clients) accessible via `redis-cli INFO`.
 - Cache hit/miss is implicitly observable by comparing `keyspace_hits` vs `keyspace_misses` from `redis-cli INFO stats`.
 
-### NFR8 — Data Integrity
+### NFR8 - Data Integrity
 
 Multi-document ACID transactions are used for:
-1. **Order placement** — stock decrement + order creation + cart clear in a single transaction.
-2. **Order cancellation** — stock restoration + status update in a single transaction.
+1. **Order placement** - stock decrement + order creation + cart clear in a single transaction.
+2. **Order cancellation** - stock restoration + status update in a single transaction.
 
 Both use `session.abortTransaction()` on any error, guaranteeing atomicity. Post-commit side effects (inventory log, Redis leaderboard) are fire-and-forget to keep the transaction window minimal.
 
@@ -503,7 +517,7 @@ The monthly revenue pipeline uses a `COLLSCAN` because matching on `status` + gr
 | Cache stampede on high-traffic product pages | Implemented ±20% TTL jitter in `cache.set()` |
 | Guest cart requiring session tracking without auth | UUID `guestId` cookie + Redis String with 24h TTL |
 | Trending scores growing unboundedly | Weekly cron job (`redisService.resetTrendingScores()`) can be scheduled to reset scores and provide "trending this week" semantics |
-| MongoDB keyfile permissions for Docker replica set | Keyfile must be chmod 400 and owned by the MongoDB container user — documented in setup steps |
+| MongoDB keyfile permissions for Docker replica set | Keyfile must be chmod 400 and owned by the MongoDB container user - documented in setup steps |
 | HyperLogLog cardinality collision for low traffic | Acceptable trade-off: HLL error rate is ~0.81%; for products with < 100 visitors exact counting from Redis Set would be used, but for scale HLL is the right choice |
 
 ---
@@ -511,17 +525,50 @@ The monthly revenue pipeline uses a `COLLSCAN` because matching on `status` + gr
 ## 9. Future Enhancements
 
 1. **Elasticsearch integration** for advanced product search (faceted filtering, spelling correction).
-2. **Background cache warm-up** — a worker pre-populates product detail caches before TTL expiry for the top 1000 products.
+2. **Background cache warm-up** - a worker pre-populates product detail caches before TTL expiry for the top 1000 products.
 3. **Real-time notifications** via WebSockets or Server-Sent Events (order status updates, flash-sale alerts).
-4. **Image CDN integration** — product images stored in S3 with CloudFront distribution; image URLs already stored in `product.images[]`.
-5. **Payment gateway integration** — Stripe webhook handling for `isPaid` / `paidAt` updates.
-6. **Guest-to-user cart merge** — on login, merge `guest:cart:{guestId}` items into the user's MongoDB cart.
+4. **Image CDN integration** - product images stored in S3 with CloudFront distribution; image URLs already stored in `product.images[]`.
+5. **Payment gateway integration** - Stripe webhook handling for `isPaid` / `paidAt` updates.
+6. **Guest-to-user cart merge** - on login, merge `guest:cart:{guestId}` items into the user's MongoDB cart.
 7. **MongoDB Atlas Search** for full-text search with more sophisticated relevance scoring.
 8. **Redis Cluster** (6+ nodes, 3 masters + 3 replicas) for horizontal cache scaling under flash-sale traffic.
 
 ---
 
-## 10. References
+## 10. Screenshots
+
+All screenshots were captured from a live running instance after executing `npm run seed` followed by `npm run dev`.
+
+### 10.1 Swagger UI - API Overview
+![Swagger UI - full endpoint overview](docs/swagger-overview.png)
+
+### 10.2 Redis Sorted Set - Trending Products
+![redis-cli ZREVRANGE trending:products 0 4 WITHSCORES](docs/redis-sorted-set.png)
+
+### 10.3 Redis Hash - Session Storage
+![redis-cli HGETALL session:demo-session-001](docs/redis-hash.png)
+
+### 10.4 Redis Namespaces - All 5 Data Types
+![redis-cli KEYS showing all data type namespaces](docs/redis-datatypes.png)
+
+### 10.5 MongoDB Replica Set - 3 Nodes Healthy
+![rs.status() showing PRIMARY + 2 SECONDARY](docs/mongo-rs-status.png)
+
+### 10.6 MongoDB Index Usage - IXSCAN Confirmed
+![explain("executionStats") showing IXSCAN, nReturned = totalDocsExamined](docs/mongo-explain.png)
+
+### 10.7 Aggregation Pipeline - Monthly Revenue
+![GET /analytics/sales/monthly response](docs/swagger-monthly.png)
+
+### 10.8 Trending Endpoint Response
+![GET /analytics/trending response showing Redis Sorted Set data](docs/swagger-trending.png)
+
+### 10.9 Order Placement - ACID Transaction
+![POST /orders 201 response](docs/swagger-order.png)
+
+---
+
+## 11. References
 
 [1] K. Chodorow, *MongoDB: The Definitive Guide*, 3rd ed. Sebastopol, CA: O'Reilly Media, 2019.
 

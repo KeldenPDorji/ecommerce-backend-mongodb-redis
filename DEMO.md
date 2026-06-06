@@ -1,6 +1,6 @@
-# Screen Recording Script — DBS302 Demo
+# Screen Recording Script - DBS302 Demo
 
-**For collaborators:** Follow this file top to bottom. Every step is numbered. The goal is to show the DB layer (MongoDB + Redis) working live — not just the UI.
+**For collaborators:** Follow this file top to bottom. Every step is numbered. The goal is to show the DB layer (MongoDB + Redis) working live - not just the UI.
 
 ---
 
@@ -10,7 +10,7 @@
 # 1. Install dependencies
 npm install
 
-# 2. Create your .env (copy the example — works as-is for local demo)
+# 2. Create your .env (copy the example - works as-is for local demo)
 cp .env.example .env
 
 # 3. Start MongoDB and Redis (macOS)
@@ -32,13 +32,13 @@ Server runs at **http://localhost:5001**
 
 Open **http://localhost:5001/api-docs** in the browser.
 
-Swagger UI is the visual interface for the API — it lists every endpoint, lets you fill in inputs, hit **Execute**, and see the real response from MongoDB/Redis. For a backend project this is the frontend for demo purposes.
+Swagger UI is the visual interface for the API - it lists every endpoint, lets you fill in inputs, hit **Execute**, and see the real response from MongoDB/Redis. For a backend project this is the frontend for demo purposes.
 
 **The lock icon** on an endpoint means it requires a logged-in user (JWT token). Without a token the server returns `401 Unauthorized`. With a token it returns real data. This demonstrates the auth + RBAC system.
 
 ---
 
-## Screen Recording — Step by Step
+## Screen Recording - Step by Step
 
 ### 1. Open Swagger in browser
 
@@ -61,7 +61,7 @@ Execute → copy the `accessToken` value from the response.
 
 Click the **Authorize** button at the top of the page → paste the token → **Authorize** → Close.
 
-Do this once at the start — now every endpoint in the demo works without interruption.
+Do this once at the start - now every endpoint in the demo works without interruption.
 
 ---
 
@@ -106,7 +106,7 @@ You'll see revenue grouped by year and month:
 ]
 ```
 
-**What this proves:** MongoDB aggregation pipeline — `$match` (delivered/shipped orders) → `$group` (sum revenue by month) → `$sort`. This runs entirely inside MongoDB, not in application code.
+**What this proves:** MongoDB aggregation pipeline - `$match` (delivered/shipped orders) → `$group` (sum revenue by month) → `$sort`. This runs entirely inside MongoDB, not in application code.
 
 ---
 
@@ -118,7 +118,7 @@ Fill in `month`: `2026-06` → **Execute**
 
 You'll see top spenders ranked by total spend.
 
-**What this proves:** Redis Sorted Set (`leaderboard:buyers:2026-06`) — each purchase adds to a user's score using `ZINCRBY`. One O(log N) write per order, one O(N) read for the full leaderboard.
+**What this proves:** Redis Sorted Set (`leaderboard:buyers:2026-06`) - each purchase adds to a user's score using `ZINCRBY`. One O(log N) write per order, one O(N) read for the full leaderboard.
 
 ---
 
@@ -148,27 +148,27 @@ Then scroll to **Orders → POST /orders** → **Try it out**
 
 Execute.
 
-**What this proves:** MongoDB multi-document ACID transaction — stock decrement + order insert + cart clear happen atomically. If any step fails, all three are rolled back.
+**What this proves:** MongoDB multi-document ACID transaction - stock decrement + order insert + cart clear happen atomically. If any step fails, all three are rolled back.
 
 ---
 
-### 8. Terminal — Raw DB Proof (3 commands)
+### 8. Terminal - Raw DB Proof (3 commands)
 
 Split the screen: browser on one side, terminal on the other.
 
-**Redis — confirm the trending scores are real data:**
+**Redis - confirm the trending scores are real data:**
 ```bash
 redis-cli ZREVRANGE trending:products 0 4 WITHSCORES
 ```
 The ObjectIds and scores match exactly what Swagger returned in Step 2.
 
-**Redis — confirm the session Hash:**
+**Redis - confirm the session Hash:**
 ```bash
 redis-cli HGETALL session:demo-session-001
 ```
 Shows `userId`, `role`, `name`, `loginAt` stored as Hash fields with a TTL.
 
-**MongoDB — run the aggregation directly (no app layer):**
+**MongoDB - run the aggregation directly (no app layer):**
 ```bash
 mongosh ecommerce --eval "
 db.orders.aggregate([
@@ -179,7 +179,7 @@ db.orders.aggregate([
 ]).toArray()
 "
 ```
-The numbers match what Swagger returned in Step 5 — proving the API is reading straight from MongoDB, not cached fake data.
+The numbers match what Swagger returned in Step 5 - proving the API is reading straight from MongoDB, not cached fake data.
 
 ---
 

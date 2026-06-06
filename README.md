@@ -1,4 +1,4 @@
-# XYZ Shope — E-Commerce Backend
+# XYZ Shope - E-Commerce Backend
 
 A production-ready REST API for an online retail platform built with **Node.js**, **TypeScript**, **MongoDB 8**, and **Redis 7**.
 
@@ -32,12 +32,12 @@ A production-ready REST API for an online retail platform built with **Node.js**
 | Authenticated cart | MongoDB-persisted; cleared atomically on checkout |
 | ACID order placement | MongoDB multi-document transaction: stock lock + order + cart clear |
 | Product reviews | Compound unique index; auto-recalculates `averageRating` post-save |
-| Trending products | Redis Sorted Set — views +1, purchases +5; top-10 endpoint |
+| Trending products | Redis Sorted Set - views +1, purchases +5; top-10 endpoint |
 | Recently viewed | Redis List per user; capped at 20; preserves recency order |
-| Unique visitors | Redis HyperLogLog — O(1) space, ~0.81 % error |
+| Unique visitors | Redis HyperLogLog - O(1) space, ~0.81 % error |
 | Top buyers leaderboard | Redis Sorted Set per calendar month |
 | Session management | Redis Hash with TTL |
-| Rate limiting | Global · Auth · Checkout — all Redis-backed |
+| Rate limiting | Global · Auth · Checkout - all Redis-backed |
 | Analytics | 3 MongoDB aggregation pipelines; cached in Redis |
 | Inventory log | Append-only events on every stock change |
 | Sharding plan | Documented in `report.md` |
@@ -80,8 +80,8 @@ A production-ready REST API for an online retail platform built with **Node.js**
 ## Prerequisites (local dev without Docker)
 
 - Node.js ≥ 20
-- MongoDB running locally — `brew services start mongodb-community@8.0`
-- Redis running locally — `brew services start redis`
+- MongoDB running locally - `brew services start mongodb-community@8.0`
+- Redis running locally - `brew services start redis`
 
 ---
 
@@ -93,7 +93,7 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env — change the two JWT secrets (min 32 chars each)
+# Edit .env - change the two JWT secrets (min 32 chars each)
 
 # 3. Seed the database
 npm run seed
@@ -131,82 +131,82 @@ MONGODB_URI="mongodb://root:rootpassword@localhost:27017/ecommerce?authSource=ad
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `MONGODB_URI` | ✅ | — | MongoDB connection string |
+| `MONGODB_URI` | ✅ | - | MongoDB connection string |
 | `REDIS_HOST` | ✅ | `127.0.0.1` | Redis host |
 | `REDIS_PORT` | ✅ | `6379` | Redis port |
-| `REDIS_PASSWORD` | — | — | Redis auth password (if set) |
-| `JWT_ACCESS_SECRET` | ✅ | — | Min 32 chars |
-| `JWT_REFRESH_SECRET` | ✅ | — | Min 32 chars |
-| `JWT_ACCESS_EXPIRES_IN` | — | `15m` | |
-| `JWT_REFRESH_EXPIRES_IN` | — | `7d` | |
-| `PORT` | — | `5001` | |
-| `CLIENT_URL` | — | `http://localhost:3000` | CORS allow-list |
-| `RATE_LIMIT_MAX` | — | `100` | Requests per 15-min window |
+| `REDIS_PASSWORD` | - | - | Redis auth password (if set) |
+| `JWT_ACCESS_SECRET` | ✅ | - | Min 32 chars |
+| `JWT_REFRESH_SECRET` | ✅ | - | Min 32 chars |
+| `JWT_ACCESS_EXPIRES_IN` | - | `15m` | |
+| `JWT_REFRESH_EXPIRES_IN` | - | `7d` | |
+| `PORT` | - | `5001` | |
+| `CLIENT_URL` | - | `http://localhost:3000` | CORS allow-list |
+| `RATE_LIMIT_MAX` | - | `100` | Requests per 15-min window |
 
-> **Never commit `.env`** — it is in `.gitignore`.
+> **Never commit `.env`** - it is in `.gitignore`.
 
 ---
 
 ## API Reference
 
-### Auth — `/api/v1/auth`
+### Auth - `/api/v1/auth`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/register` | — | Register; returns access token + sets refresh cookie |
-| POST | `/login` | — | Login; rotates refresh token |
+| POST | `/register` | - | Register; returns access token + sets refresh cookie |
+| POST | `/login` | - | Login; rotates refresh token |
 | POST | `/refresh` | cookie | Issue new access token |
 | POST | `/logout` | Bearer | Revoke refresh token |
 | GET | `/me` | Bearer | Current user profile |
 
-### Products — `/api/v1/products`
+### Products - `/api/v1/products`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/` | — | List (search, filter, sort, paginate) |
+| GET | `/` | - | List (search, filter, sort, paginate) |
 | GET | `/recently-viewed` | Bearer | Per-user recently viewed list (Redis) |
-| GET | `/:id` | — | Single product + fires view tracking |
-| GET | `/:id/unique-visitors` | — | HyperLogLog estimated unique visitors |
+| GET | `/:id` | - | Single product + fires view tracking |
+| GET | `/:id/unique-visitors` | - | HyperLogLog estimated unique visitors |
 | POST | `/` | admin | Create |
 | PATCH | `/:id` | admin | Update + cache invalidation |
 | DELETE | `/:id` | admin | Soft-delete |
 
 **Query params for `GET /`:** `page`, `limit`, `search`, `category`, `minPrice`, `maxPrice`, `sort` (`price_asc` \| `price_desc` \| `newest` \| `rating`)
 
-### Categories — `/api/v1/categories`
+### Categories - `/api/v1/categories`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/` | — | All active categories (cached) |
-| GET | `/:id` | — | Single category |
+| GET | `/` | - | All active categories (cached) |
+| GET | `/:id` | - | Single category |
 | POST | `/` | admin | Create |
 | PATCH | `/:id` | admin | Update |
 | DELETE | `/:id` | admin | Soft-delete |
 
-### Reviews — `/api/v1/products/:productId/reviews`
+### Reviews - `/api/v1/products/:productId/reviews`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/` | — | List reviews for product (paginated) |
+| GET | `/` | - | List reviews for product (paginated) |
 | POST | `/` | Bearer | Create review (one per user per product) |
 | PATCH | `/:reviewId` | Bearer (owner) | Update own review |
 | DELETE | `/:reviewId` | Bearer (owner \| admin) | Delete review |
 | POST | `/:reviewId/helpful` | Bearer | Mark review as helpful |
 
-### Cart — `/api/v1/cart`
+### Cart - `/api/v1/cart`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/guest` | — | Get guest cart (cookie-based, Redis) |
-| POST | `/guest/items` | — | Add item to guest cart |
-| PATCH | `/guest/items/:productId` | — | Update guest cart item qty |
-| DELETE | `/guest` | — | Clear guest cart |
+| GET | `/guest` | - | Get guest cart (cookie-based, Redis) |
+| POST | `/guest/items` | - | Add item to guest cart |
+| PATCH | `/guest/items/:productId` | - | Update guest cart item qty |
+| DELETE | `/guest` | - | Clear guest cart |
 | GET | `/` | Bearer | Get authenticated cart (MongoDB) |
 | POST | `/items` | Bearer | Add item |
 | PATCH | `/items/:productId` | Bearer | Update qty (0 = remove) |
 | DELETE | `/` | Bearer | Clear cart |
 
-### Orders — `/api/v1/orders`
+### Orders - `/api/v1/orders`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -216,7 +216,7 @@ MONGODB_URI="mongodb://root:rootpassword@localhost:27017/ecommerce?authSource=ad
 | PATCH | `/:id/cancel` | Bearer | Cancel (pending/confirmed only; restores stock) |
 | PATCH | `/:id/status` | admin | Update status + tracking number |
 
-### Users — `/api/v1/users`
+### Users - `/api/v1/users`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -229,11 +229,11 @@ MONGODB_URI="mongodb://root:rootpassword@localhost:27017/ecommerce?authSource=ad
 | POST | `/wishlist/:productId` | Bearer | Add to wishlist |
 | DELETE | `/wishlist/:productId` | Bearer | Remove from wishlist |
 
-### Analytics — `/api/v1/analytics`
+### Analytics - `/api/v1/analytics`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/trending` | — | Top 10 trending products (Redis Sorted Set) |
+| GET | `/trending` | - | Top 10 trending products (Redis Sorted Set) |
 | GET | `/sales/monthly` | admin | Monthly revenue aggregation pipeline |
 | GET | `/sales/daily` | admin | Daily sales last 30 days |
 | GET | `/products/low-stock` | admin | Products at or below stock threshold |
@@ -258,7 +258,7 @@ mongosh ecommerce --eval 'db.users.updateOne({email:"alice@test.com"},{$set:{rol
 # Browse trending products (public)
 curl -s http://localhost:5001/api/v1/analytics/trending | python3 -m json.tool
 
-# View a product — triggers Redis tracking
+# View a product - triggers Redis tracking
 curl -s http://localhost:5001/api/v1/products/<PRODUCT_ID>
 
 # Check unique visitor count
@@ -293,4 +293,4 @@ After running `npm run seed`:
 - **CORS** restricted to `CLIENT_URL`
 - Production error responses omit stack traces
 - All sensitive schema fields use `select: false`
-- Redis `volatile-ttl` eviction policy — cache keys evicted first, critical keys preserved
+- Redis `volatile-ttl` eviction policy - cache keys evicted first, critical keys preserved

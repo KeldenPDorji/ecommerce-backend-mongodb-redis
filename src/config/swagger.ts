@@ -628,14 +628,14 @@ const spec = {
     '/analytics/trending': {
       get: {
         tags: ['Analytics'],
-        summary: 'Top 10 trending — Redis Sorted Set ZREVRANGE (public)',
+        summary: 'Top 10 trending - Redis Sorted Set ZREVRANGE (public)',
         responses: { 200: { description: 'Array of { product, score }' } },
       },
     },
     '/analytics/sales/monthly': {
       get: {
         tags: ['Analytics'],
-        summary: 'Monthly revenue — MongoDB aggregation pipeline (admin)',
+        summary: 'Monthly revenue - MongoDB aggregation pipeline (admin)',
         description: '$match delivered/shipped → $group by year/month → $sort',
         security: [{ BearerAuth: [] }],
         responses: { 200: { description: 'Array of { year, month, revenue, orderCount }' } },
@@ -644,7 +644,7 @@ const spec = {
     '/analytics/sales/daily': {
       get: {
         tags: ['Analytics'],
-        summary: 'Daily sales last 30 days — aggregation with $dateFromParts (admin)',
+        summary: 'Daily sales last 30 days - aggregation with $dateFromParts (admin)',
         security: [{ BearerAuth: [] }],
         responses: { 200: { description: 'Array of { date, revenue, orders }' } },
       },
@@ -652,7 +652,7 @@ const spec = {
     '/analytics/products/top': {
       get: {
         tags: ['Analytics'],
-        summary: 'Top products by revenue — $unwind + $group + $lookup (admin)',
+        summary: 'Top products by revenue - $unwind + $group + $lookup (admin)',
         security: [{ BearerAuth: [] }],
         responses: { 200: { description: 'Array of { name, totalRevenue, unitsSold }' } },
       },
@@ -669,16 +669,16 @@ const spec = {
     '/analytics/leaderboard/buyers': {
       get: {
         tags: ['Analytics'],
-        summary: 'Top buyers — Redis Sorted Set ZREVRANGE leaderboard:buyers:{month} (admin)',
+        summary: 'Top buyers - Redis Sorted Set ZREVRANGE leaderboard:buyers:{month} (admin)',
         security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'month', in: 'query', schema: { type: 'string', example: '2026-06' }, description: 'YYYY-MM — defaults to current month' }],
+        parameters: [{ name: 'month', in: 'query', schema: { type: 'string', example: '2026-06' }, description: 'YYYY-MM - defaults to current month' }],
         responses: { 200: { description: 'Array of { userId, amount }' } },
       },
     },
     '/analytics/inventory/{productId}': {
       get: {
         tags: ['Analytics'],
-        summary: 'Inventory event history — append-only log (admin)',
+        summary: 'Inventory event history - append-only log (admin)',
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'productId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { 200: { description: 'Paginated inventory events' } },
@@ -692,7 +692,7 @@ export function setupSwagger(app: Express): void {
     '/api-docs',
     swaggerUi.serve,
     swaggerUi.setup(spec, {
-      customSiteTitle: 'XYZ Shope API — DBS302',
+      customSiteTitle: 'XYZ Shope API - DBS302',
       swaggerOptions: { persistAuthorization: true },
     })
   );

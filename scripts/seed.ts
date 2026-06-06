@@ -286,9 +286,9 @@ async function main() {
   const allKeys = [...keysToFlush, ...lb, ...rv, ...hll, ...sess, ...gc];
   if (allKeys.length) await redis.del(...allKeys);
 
-  // Sorted Set 1 — Trending (view + purchase weighted scores)
+  // Sorted Set 1 - Trending (view + purchase weighted scores)
   const trendingData: Array<{ sku: string; views: number; purchases: number }> = [
-    { sku: 'LAP-003', views: 420, purchases: 18 },   // GameBeast — most hyped
+    { sku: 'LAP-003', views: 420, purchases: 18 },   // GameBeast - most hyped
     { sku: 'PHN-002', views: 380, purchases: 22 },   // iPhone
     { sku: 'LAP-001', views: 310, purchases: 14 },   // ProBook
     { sku: 'BOK-002', views: 290, purchases: 30 },   // Atomic Habits
@@ -306,7 +306,7 @@ async function main() {
   }
   console.log('Seeded trending Sorted Set (10 products)');
 
-  // Sorted Set 2 — Monthly buyer leaderboard
+  // Sorted Set 2 - Monthly buyer leaderboard
   const buyerData = [
     { email: 'carol@xyzshope.com', spend: 2399.97 },
     { email: 'dave@xyzshope.com',  spend: 1799.94 },
@@ -322,7 +322,7 @@ async function main() {
   }
   console.log('Seeded leaderboard Sorted Set (7 buyers)');
 
-  // List — Recently viewed per user (last 5 viewed products)
+  // List - Recently viewed per user (last 5 viewed products)
   const carolId = userMap.get('carol@xyzshope.com')!.toString();
   const recentProducts = ['LAP-001', 'PHN-002', 'BOK-001', 'SPT-001', 'BTY-001'];
   for (const sku of recentProducts) {
@@ -330,7 +330,7 @@ async function main() {
   }
   console.log('Seeded recently-viewed List (carol, 5 products)');
 
-  // HyperLogLog — Unique product page visitors
+  // HyperLogLog - Unique product page visitors
   const hllProducts = ['LAP-003', 'PHN-002', 'BOK-002'];
   const sampleIPs = ['192.168.1.1','10.0.0.1','172.16.0.5','203.0.113.42','198.51.100.7',
                      '203.0.113.1','192.0.2.55','10.10.10.10','8.8.8.8','1.1.1.1'];
@@ -340,7 +340,7 @@ async function main() {
   }
   console.log('Seeded HyperLogLog (3 products × 10 unique IPs each)');
 
-  // Hash — Demo session
+  // Hash - Demo session
   await redisService.setSession('demo-session-001', {
     userId: userMap.get('carol@xyzshope.com')!.toString(),
     role: 'customer',
@@ -349,7 +349,7 @@ async function main() {
   }, 3600);
   console.log('Seeded session Hash (demo-session-001)');
 
-  // String — Guest cart
+  // String - Guest cart
   const guestCart = {
     items: [
       { productId: productMap.get('BTY-001')!._id.toString(), name: 'Vitamin C Serum', price: 34.99, quantity: 2 },
