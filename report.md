@@ -1,14 +1,5 @@
 # Technical Report - XYZ Shope E-Commerce Backend
 
-| | |
-|---|---|
-| **Module** | DBS302 - Database Systems |
-| **Assignment** | Production-Ready E-Commerce Backend with MongoDB and Redis |
-| **Date** | June 2026 |
-| **Repository** | github.com/KeldenDrac/E-Commerce |
-
----
-
 ## Abstract
 
 This report documents the design and implementation of the backend data layer for *XYZ Shope*, a fictional fast-growing online retailer. The system uses **MongoDB 8** as the primary document store for persistent data and **Redis 7** as an in-memory layer for caching, sessions, real-time analytics, and rate limiting. The two databases are chosen for complementary reasons: MongoDB's flexible document model accommodates a heterogeneous product catalogue and supports ACID multi-document transactions for order placement; Redis's sub-millisecond latency and rich data-structure set enable real-time features that would be prohibitively expensive to run against MongoDB. All design decisions are justified against the CAP theorem, the system's non-functional requirements, and real-world operational concerns.
@@ -27,18 +18,18 @@ This report documents the design and implementation of the backend data layer fo
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     Express API  (Node.js / TypeScript)             │
 │                                                                     │
-│  Routes → Zod validation → Controllers → Services                  │
+│  Routes → Zod validation → Controllers → Services                   │
 │                                                                     │
 │  Middleware: Helmet · CORS · compression · cookie-parser            │
 │             Rate-limiting (Redis-backed) · JWT auth                 │
 └────────────────┬────────────────────────────────┬───────────────────┘
                  │                                │
     ┌────────────▼──────────────┐    ┌────────────▼──────────────────┐
-    │   MongoDB 8  (Mongoose)   │    │      Redis 7  (ioredis)        │
+    │   MongoDB 8  (Mongoose)   │    │      Redis 7  (ioredis)       │
     │                           │    │                               │
     │  Collections:             │    │  String  - cache, rate limit  │
-    │   users                   │    │  Sorted Set - trending,        │
-    │   products                │    │              leaderboard       │
+    │   users                   │    │  Sorted Set - trending,       │
+    │   products                │    │              leaderboard      │
     │   categories              │    │  List    - recently viewed    │
     │   orders                  │    │  HyperLogLog - unique visits  │
     │   reviews                 │    │  Hash    - sessions,          │
