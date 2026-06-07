@@ -32,21 +32,27 @@ export const updateStatusSchema = z.object({
 const TAX_RATE = 0.08;
 const SHIPPING_THRESHOLD = 50;
 const SHIPPING_FEE = 5.99;
+const TRANSACTION_OPTIONS = {
+  readPreference: 'primary' as const,
+  readConcern: { level: 'snapshot' as const },
+  writeConcern: { w: 'majority' as const, j: true },
+};
 
 export const placeOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { shippingAddress, paymentMethod } = req.body as z.infer<typeof placeOrderSchema>;
 
-  const cart = await Cart.findOne({ user: req.userId });
-  if (!cart || cart.items.length === 0) {
-    throw new AppError('Cart is empty', 400, 'EMPTY_CART');
-  }
-
   // Validate stock and lock prices in a session for atomicity
   const session = await mongoose.startSession();
-  session.startTransaction();
+  session.startTransaction(TRANSACTION_OPTIONS);
 
   try {
+    const cart = await Cart.findOne({ user: req.userId }).session(session);
+    if (!cart || cart.items.length === 0) {
+      throw new AppError('Cart is empty', 400, 'EMPTY_CART');
+    }
+
     const orderItems = [];
+    const inventoryEvents = [];
     let itemsPrice = 0;
 
     for (const cartItem of cart.items) {
@@ -70,6 +76,13 @@ export const placeOrder = asyncHandler(async (req: AuthRequest, res: Response) =
         image: product.images[0] ?? '',
         price: product.price,
         quantity: cartItem.quantity,
+      });
+      inventoryEvents.push({
+        product: product._id,
+        sku: product.sku,
+        delta: -cartItem.quantity,
+        reason: 'sale' as const,
+        stockAfter: product.stock,
       });
       itemsPrice += product.price * cartItem.quantity;
     }
@@ -97,18 +110,14 @@ export const placeOrder = asyncHandler(async (req: AuthRequest, res: Response) =
     // Clear the cart
     await Cart.findOneAndUpdate({ user: req.userId }, { items: [], totalPrice: 0 }, { session });
 
+    await Inventory.insertMany(
+      inventoryEvents.map((event) => ({ ...event, reference: order._id })),
+      { session }
+    );
+
     await session.commitTransaction();
 
-    // Post-commit: write inventory events + update Redis leaderboard (fire-and-forget)
-    const inventoryEvents = orderItems.map((item) => ({
-      product: item.product,
-      sku: '',
-      delta: -item.quantity,
-      reason: 'sale' as const,
-      reference: order._id,
-      stockAfter: 0,
-    }));
-    void Inventory.insertMany(inventoryEvents).catch(() => null);
+    // Post-commit: update non-critical Redis projections.
     void redisService.recordPurchase(String(req.userId), totalPrice).catch(() => null);
     // Boost trending score on purchase (weighted 5× vs a view)
     void Promise.all(
@@ -118,11 +127,11 @@ export const placeOrder = asyncHandler(async (req: AuthRequest, res: Response) =
     );
 
     const user = await User.findById(req.userId).select('email');
-    if (user) await sendOrderConfirmation(user.email, String(order._id));
+    if (user) void sendOrderConfirmation(user.email, String(order._id)).catch(() => undefined);
 
     res.status(201).json({ success: true, data: order });
   } catch (err) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     throw err;
   } finally {
     session.endSession();
@@ -170,42 +179,45 @@ export const updateOrderStatus = asyncHandler(async (req: AuthRequest, res: Resp
 });
 
 export const cancelOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.userId });
-  if (!order) throw new AppError('Order not found', 404, 'NOT_FOUND');
-
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    throw new AppError('Order cannot be cancelled at this stage', 400, 'INVALID_STATE');
-  }
-
-  // Restore stock
   const session = await mongoose.startSession();
-  session.startTransaction();
+  session.startTransaction(TRANSACTION_OPTIONS);
   try {
+    const order = await Order.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.userId,
+        status: { $in: ['pending', 'confirmed'] },
+      },
+      { status: 'cancelled' },
+      { new: false, session }
+    );
+    if (!order) {
+      throw new AppError('Order not found or cannot be cancelled', 400, 'INVALID_STATE');
+    }
+
+    const inventoryEvents = [];
     for (const item of order.items) {
-      await Product.findByIdAndUpdate(
+      const product = await Product.findByIdAndUpdate(
         item.product,
         { $inc: { stock: item.quantity } },
-        { session }
+        { new: true, session }
       );
-    }
-    await Order.findByIdAndUpdate(order._id, { status: 'cancelled' }, { session });
-    await session.commitTransaction();
-
-    // Log inventory restoration
-    void Inventory.insertMany(
-      order.items.map((item) => ({
+      if (!product) throw new AppError('Product not found during cancellation', 409, 'INTEGRITY_ERROR');
+      inventoryEvents.push({
         product: item.product,
-        sku: '',
+        sku: product.sku,
         delta: item.quantity,
         reason: 'return' as const,
         reference: order._id,
-        stockAfter: 0,
-      }))
-    ).catch(() => null);
+        stockAfter: product.stock,
+      });
+    }
+    await Inventory.insertMany(inventoryEvents, { session });
+    await session.commitTransaction();
 
     res.json({ success: true, message: 'Order cancelled' });
   } catch (err) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     throw err;
   } finally {
     session.endSession();

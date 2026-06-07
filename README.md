@@ -36,12 +36,12 @@ A production-ready REST API for an online retail platform built with **Node.js**
 | Recently viewed | Redis List per user; capped at 20; preserves recency order |
 | Unique visitors | Redis HyperLogLog - O(1) space, ~0.81 % error |
 | Top buyers leaderboard | Redis Sorted Set per calendar month |
-| Session management | Redis Hash with TTL |
+| Session management | Redis Hash with TTL; JWT session ID verification and logout revocation |
 | Rate limiting | Global · Auth · Checkout - all Redis-backed |
 | Analytics | 3 MongoDB aggregation pipelines; cached in Redis |
 | Inventory log | Append-only events on every stock change |
 | Sharding plan | Documented in `report.md` |
-| HA | MongoDB 3-node replica set · Redis Sentinel (3 nodes) |
+| HA | MongoDB 3-node replica set · Redis Sentinel discovery (3 nodes) |
 | Persistence | Redis hybrid RDB + AOF (`appendfsync everysec`) |
 | Seed data | 10 categories · 10 users · 50 products · 20 orders · 15 reviews |
 
@@ -67,7 +67,7 @@ A production-ready REST API for an online retail platform built with **Node.js**
 │   ├── redis.conf       # Redis persistence + eviction config
 │   ├── sentinel.conf    # Redis Sentinel HA config
 │   ├── rs-init.js       # MongoDB replica-set init script
-│   └── mongo-keyfile    # Replica-set internal auth keyfile
+│   └── mongo-keyfile    # Generated, ignored replica-set internal auth keyfile
 ├── docker-compose.yml   # MongoDB 3-node RS + Redis master/replica/sentinel + app
 ├── Dockerfile           # Multi-stage production image
 ├── report.md            # Full technical report (DBS302)
@@ -109,21 +109,26 @@ Server starts on **http://localhost:5001**.
 ## Docker Setup (replica set + Redis HA)
 
 ```bash
-# Generate a 400-permission keyfile (run once)
-chmod 400 docker/mongo-keyfile
+# Load credentials used by the commands below
+set -a; . ./.env; set +a
+
+# Generate an ignored, random 400-permission keyfile (run once)
+sh scripts/setup-mongo-keyfile.sh
 
 # Start all services
 docker compose up -d
 
 # Initialise the MongoDB replica set (run once)
-docker compose exec mongo1 mongosh -u root -p rootpassword \
+docker compose exec mongo1 mongosh -u "$MONGO_ROOT_USERNAME" -p "$MONGO_ROOT_PASSWORD" \
   --authenticationDatabase admin \
   --eval 'load("/docker-entrypoint-initdb.d/rs-init.js")'
 
 # Seed (targeting the Docker cluster)
-MONGODB_URI="mongodb://root:rootpassword@localhost:27017/ecommerce?authSource=admin&replicaSet=rs0" \
+MONGODB_URI="mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@localhost:27017/ecommerce?authSource=admin&replicaSet=rs0" \
   npm run seed
 ```
+
+The Docker stack uses the MongoDB and Redis credentials from `.env`. Replace the example passwords before exposing any service outside local development.
 
 ---
 
@@ -135,6 +140,8 @@ MONGODB_URI="mongodb://root:rootpassword@localhost:27017/ecommerce?authSource=ad
 | `REDIS_HOST` | ✅ | `127.0.0.1` | Redis host |
 | `REDIS_PORT` | ✅ | `6379` | Redis port |
 | `REDIS_PASSWORD` | - | - | Redis auth password (if set) |
+| `REDIS_MASTER_NAME` | - | - | Sentinel monitored-master name |
+| `REDIS_SENTINELS` | - | - | Comma-separated `host:port` Sentinel endpoints |
 | `JWT_ACCESS_SECRET` | ✅ | - | Min 32 chars |
 | `JWT_REFRESH_SECRET` | ✅ | - | Min 32 chars |
 | `JWT_ACCESS_EXPIRES_IN` | - | `15m` | |
@@ -294,3 +301,14 @@ After running `npm run seed`:
 - Production error responses omit stack traces
 - All sensitive schema fields use `select: false`
 - Redis `volatile-ttl` eviction policy - cache keys evicted first, critical keys preserved
+
+## Verification
+
+```bash
+npm run build
+npm test
+docker compose config --quiet
+npm run benchmark:redis
+PRODUCT_ID=<id> k6 run benchmarks/product-detail.k6.js
+sh scripts/verify-ha.sh
+```

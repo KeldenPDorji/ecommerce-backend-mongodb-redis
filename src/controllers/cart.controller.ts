@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
 import { AppError } from '../utils/AppError';
@@ -103,7 +103,7 @@ export const clearCart = asyncHandler(async (req: AuthRequest, res: Response) =>
 function ensureGuestId(req: Request, res: Response): string {
   let guestId = req.cookies?.[GUEST_COOKIE] as string | undefined;
   if (!guestId) {
-    guestId = uuidv4();
+    guestId = randomUUID();
     res.cookie(GUEST_COOKIE, guestId, {
       httpOnly: true,
       maxAge: GUEST_CART_TTL * 1000,

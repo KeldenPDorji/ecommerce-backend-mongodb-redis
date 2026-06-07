@@ -83,32 +83,24 @@ export const getProduct = asyncHandler(async (req: AuthRequest, res: Response) =
   const { id } = req.params;
   const cacheKey = cache.productKey(id);
 
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    // Still fire tracking for cache hits (fire-and-forget)
-    const identifier = req.userId ?? (req.ip ?? 'anon');
-    void Promise.all([
-      redisService.incrementTrendingScore(id, 1),
-      redisService.trackUniqueVisitor(id, identifier),
-      req.userId ? redisService.addRecentlyViewed(req.userId, id) : Promise.resolve(),
-    ]);
-    res.json(cached);
-    return;
-  }
+  const result = await cache.getOrSet(
+    cacheKey,
+    async () => {
+      const product = await Product.findOne({ _id: id, isActive: true }).populate('category', 'name slug');
+      if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND');
+      return { success: true, data: product };
+    },
+    600
+  );
 
-  const product = await Product.findOne({ _id: id, isActive: true }).populate('category', 'name slug');
-  if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND');
-
-  // Fire Redis tracking (non-blocking)
+  // Tracking remains independent from the cached response.
   const identifier = req.userId ?? (req.ip ?? 'anon');
   void Promise.all([
     redisService.incrementTrendingScore(id, 1),
     redisService.trackUniqueVisitor(id, identifier),
     req.userId ? redisService.addRecentlyViewed(req.userId, id) : Promise.resolve(),
-  ]);
+  ]).catch(() => undefined);
 
-  const result = { success: true, data: product };
-  await cache.set(cacheKey, result, 600);
   res.json(result);
 });
 
@@ -136,7 +128,7 @@ export const getUniqueVisitorCount = asyncHandler(async (req: Request, res: Resp
 export const createProduct = asyncHandler(async (req: Request, res: Response) => {
   const data = req.body as z.infer<typeof createProductSchema>;
   const product = await Product.create(data);
-  await cache.delPattern('products:list:*');
+  await cache.invalidatePattern('products:list:*');
   res.status(201).json({ success: true, data: product });
 });
 
@@ -151,8 +143,8 @@ export const updateProduct = asyncHandler(async (req: Request, res: Response) =>
   if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND');
 
   await Promise.all([
-    cache.del(cache.productKey(id)),
-    cache.delPattern('products:list:*'),
+    cache.invalidate(cache.productKey(id)),
+    cache.invalidatePattern('products:list:*'),
   ]);
   res.json({ success: true, data: product });
 });
@@ -167,8 +159,8 @@ export const deleteProduct = asyncHandler(async (req: Request, res: Response) =>
   if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND');
 
   await Promise.all([
-    cache.del(cache.productKey(id)),
-    cache.delPattern('products:list:*'),
+    cache.invalidate(cache.productKey(id)),
+    cache.invalidatePattern('products:list:*'),
   ]);
   res.json({ success: true, message: 'Product removed' });
 });

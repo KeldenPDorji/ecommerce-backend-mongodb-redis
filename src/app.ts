@@ -8,6 +8,8 @@ import { env } from './config/env';
 import { globalLimiter } from './middleware/rateLimit';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { logger } from './utils/logger';
+import mongoose from 'mongoose';
+import { getRedis } from './config/redis';
 
 import { setupSwagger } from './config/swagger';
 import authRoutes from './routes/auth.routes';
@@ -60,8 +62,22 @@ app.use(
 app.use('/api', globalLimiter);
 
 // ── Health check ───────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', env: env.NODE_ENV, timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+  const mongoReady = mongoose.connection.readyState === 1;
+  let redisReady = false;
+  try {
+    redisReady = (await getRedis().ping()) === 'PONG';
+  } catch {
+    redisReady = false;
+  }
+
+  const healthy = mongoReady && redisReady;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    env: env.NODE_ENV,
+    dependencies: { mongodb: mongoReady, redis: redisReady },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ── API routes ─────────────────────────────────────────────────────────────

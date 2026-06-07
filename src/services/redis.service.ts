@@ -118,7 +118,7 @@ export const redisService = {
     await getRedis().del(`${SESSION_PREFIX}:${sessionId}`);
   },
 
-  // ── Hash: Guest Cart ─────────────────────────────────────────────────────
+  // ── String: Guest Cart ───────────────────────────────────────────────────
   async setGuestCart(guestId: string, cart: unknown, ttl = GUEST_CART_TTL): Promise<void> {
     const key = `${GUEST_CART_PREFIX}:${guestId}`;
     await getRedis().set(key, JSON.stringify(cart), 'EX', ttl);

@@ -19,6 +19,9 @@ export async function connectDB(): Promise<void> {
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 5_000,
     socketTimeoutMS: 45_000,
+    readPreference: 'primary',
+    readConcern: { level: 'majority' },
+    writeConcern: { w: 'majority', j: true },
   });
 }
 

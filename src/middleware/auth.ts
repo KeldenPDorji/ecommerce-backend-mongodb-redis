@@ -3,19 +3,22 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 import { User } from '../models/User';
+import { redisService } from '../services/redis.service';
 
 export interface AuthRequest extends Request {
   userId?: string;
   userRole?: string;
+  sessionId?: string;
 }
 
 interface JwtPayload {
   sub: string;
   role: string;
+  sid: string;
   type: 'access' | 'refresh';
 }
 
-export function authenticate(req: AuthRequest, _res: Response, next: NextFunction): void {
+export async function authenticate(req: AuthRequest, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return next(new AppError('No token provided', 401, 'UNAUTHORIZED'));
@@ -27,8 +30,15 @@ export function authenticate(req: AuthRequest, _res: Response, next: NextFunctio
     if (payload.type !== 'access') {
       return next(new AppError('Invalid token type', 401, 'UNAUTHORIZED'));
     }
+    const session = await redisService.getSession(payload.sid);
+    if (!session || session.userId !== payload.sub) {
+      return next(new AppError('Session expired or revoked', 401, 'UNAUTHORIZED'));
+    }
+
     req.userId = payload.sub;
     req.userRole = payload.role;
+    req.sessionId = payload.sid;
+    await redisService.touchSession(payload.sid);
     next();
   } catch {
     next(new AppError('Invalid or expired token', 401, 'UNAUTHORIZED'));

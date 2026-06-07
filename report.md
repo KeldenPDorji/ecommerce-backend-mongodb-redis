@@ -32,8 +32,8 @@ This report documents the design and implementation of the backend data layer fo
     │   products                │    │              leaderboard      │
     │   categories              │    │  List    - recently viewed    │
     │   orders                  │    │  HyperLogLog - unique visits  │
-    │   reviews                 │    │  Hash    - sessions,          │
-    │   inventory               │    │            guest carts        │
+    │   reviews, carts          │    │  Hash    - sessions           │
+    │   inventory               │    │  String  - guest carts        │
     │                           │    │                               │
     │  Replica Set (3 nodes)    │    │  Master + Replica + Sentinel  │
     └───────────────────────────┘    └───────────────────────────────┘
@@ -55,7 +55,7 @@ This report documents the design and implementation of the backend data layer fo
 4. Create `Order` document inside session
 5. Clear cart inside session
 6. `commitTransaction`
-7. Post-commit: write `Inventory` log events + `ZINCRBY leaderboard:buyers:{month} {spend} {userId}`
+7. Post-commit: update the Redis leaderboard and trending projections
 
 ---
 
@@ -189,6 +189,10 @@ Reviews are a separate collection (not embedded in products) because:
 
 An append-only event log rather than a mutable stock field. Every stock movement (sale, cancellation, restock) is recorded as an immutable event. This enables full audit history, root-cause analysis for discrepancies, and is naturally compatible with eventual read models.
 
+#### 3.1.7 `carts`
+
+Authenticated carts are stored in a separate collection with one document per user. Product identifiers are referenced, while name, image, and price are embedded as a short-lived display snapshot. The cart is cleared in the same transaction that creates an order.
+
 ---
 
 ### 3.2 Index Strategy
@@ -252,7 +256,7 @@ db.products.find({ category: ObjectId("..."), isActive: true }).explain("executi
 
 Full-text search uses MongoDB's `$text` operator against the pre-built text index. Filtering, sorting, and pagination are composed into a single `find()` + `countDocuments()` query for accurate totals.
 
-All product reads first check Redis (`product:{id}` or `products:list:{queryHash}`). Cache is invalidated write-through on `createProduct`, `updateProduct`, and `deleteProduct` (soft delete). TTLs use ±20% jitter to prevent synchronized expiry (cache stampede mitigation).
+All product reads first check Redis (`product:{id}` or `products:list:{queryHash}`). Cache entries are invalidated on `createProduct`, `updateProduct`, and `deleteProduct` (soft delete). TTLs use ±20% jitter to prevent synchronized expiry.
 
 ### 4.3 Shopping Cart and Sessions
 
@@ -260,7 +264,7 @@ All product reads first check Redis (`product:{id}` or `products:list:{queryHash
 
 **Guest cart:** Stored in Redis as a JSON string at `guest:cart:{guestId}` with a 24-hour TTL. A `guestId` cookie (httpOnly, sameSite=lax) is set on first cart interaction. When a guest logs in, the application can merge the guest cart into the authenticated MongoDB cart. The Redis key expires automatically after 24 hours of inactivity - no cleanup job required.
 
-**Session management (Redis Hash):** Post-login sessions can be stored in Redis Hashes (`session:{sessionId}`) with a 7-day TTL. `HSET` allows individual field updates (e.g., `lastActive`) without deserialising the entire session.
+**Session management (Redis Hash):** Registration and login create Redis Hash sessions (`session:{sessionId}`) with a 7-day TTL. Access and refresh JWTs carry the session ID. Authentication verifies and refreshes the Redis TTL, refresh rejects revoked sessions, and logout deletes the session.
 
 ### 4.4 Order Processing
 
@@ -276,7 +280,7 @@ startSession → startTransaction
 commitTransaction
 ```
 
-If any stock check fails (concurrent orders depleting stock), the transaction is aborted and stock is fully restored. This prevents overselling. Post-commit, inventory events are written (fire-and-forget) and the buyer's monthly spending is recorded in Redis.
+If any stock check fails, the transaction is aborted and stock is fully restored. Inventory events are written inside the same transaction as stock and order changes. Post-commit, the buyer's monthly spending is recorded in Redis.
 
 Cancellation reverses the stock decrement via a separate transaction and appends `reason: "return"` inventory events.
 
@@ -374,18 +378,18 @@ Cache-hit ratios for product detail typically exceed 95% under steady traffic (T
 
 ### NFR3 - High Availability
 
-![MongoDB replica set status - 3 nodes healthy](docs/mongo-rs-status.png)
+Run `sh scripts/verify-ha.sh` after starting Docker to verify the current MongoDB members and Redis Sentinel master discovery. The checked-in screenshot is historical local evidence and must be regenerated after a full three-node Docker run.
 
 **MongoDB:** 3-node replica set (`rs0`). Primary handles all writes. Both secondaries can become the new primary via election. With `writeConcern: { w: "majority" }`, an acknowledged write has been replicated to at least 2 nodes before confirmation - surviving a single-node failure. Automatic failover completes within ~10 seconds.
 
-**Redis:** Master + 1 replica + 3 Sentinel nodes. Sentinels monitor the master (quorum = 2). On master failure, Sentinels elect the replica as the new master within ~5 seconds. Application uses ioredis which auto-reconnects.
+**Redis:** Master + 1 persistent replica + 3 Sentinel nodes. Sentinels monitor the master (quorum = 2). Both data nodes use hybrid persistence, and the application discovers the current primary through all three Sentinel endpoints using ioredis.
 
 ### NFR4 - Consistency
 
 **MongoDB Read/Write Concerns:**
-- **Write concern `majority`** is used for all business-critical writes (order creation, stock decrement). An acknowledged write is guaranteed not to be rolled back even if the primary fails.
-- **Read concern `local`** is used for general reads (product listings, user profile). This returns the most recent data on the node without waiting for majority replication - acceptable for catalogue data where brief staleness is tolerable.
-- **Read concern `majority`** is used in transactions (order placement) to ensure reads within the transaction see only committed data.
+- **Write concern `majority` with journaling** is configured on the Mongoose connection and transactions.
+- **Read concern `majority`** and primary read preference are configured for application reads.
+- **Read concern `snapshot`** is used in order and cancellation transactions for a stable transactional view.
 
 **CAP trade-off:** The system sits in the **CP** zone. During a network partition, the system will refuse writes rather than risk divergent state. For an e-commerce platform, consistency (no overselling, no lost orders) is more valuable than availability of the write path.
 
@@ -406,8 +410,8 @@ Cache-hit ratios for product detail typically exceed 95% under steady traffic (T
 - **Helmet** sets `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`, etc.
 - **CORS** restricted to `CLIENT_URL` env variable; `credentials: true` for cookie support.
 - Request bodies capped at **10 KB** (DoS mitigation).
-- Redis `protected-mode no` is only disabled within the Docker internal network - external access requires a firewall rule.
-- MongoDB root credentials are not hardcoded - provided via environment variables.
+- Redis requires authentication in Docker Compose; Sentinel also authenticates clients and uses `auth-pass` for the monitored primary.
+- MongoDB root credentials are supplied through environment variables. The internal-auth keyfile is randomly generated locally, permissioned `400`, and excluded from Git.
 - `.env` is listed in `.gitignore`; `.env.example` contains placeholder values only.
 
 ### NFR7 - Observability
@@ -415,9 +419,10 @@ Cache-hit ratios for product detail typically exceed 95% under steady traffic (T
 - **Winston** structured logging at `debug` (dev) and `info` (prod) levels.
 - **Morgan** HTTP access log piped to Winston.
 - **Redis slow log** (`slowlog-log-slower-than 10000`) captures commands taking > 10 ms.
-- **MongoDB slow query log** enabled via `db.setProfilingLevel(1, { slowms: 100 })` - logs queries over 100 ms to `system.profile`.
+- MongoDB profiling can be enabled for a controlled demo with `db.setProfilingLevel(1, { slowms: 100 })`; it is not enabled automatically because profiling has operational cost.
 - Redis `INFO` statistics (memory, keyspace hits/misses, connected clients) accessible via `redis-cli INFO`.
 - Cache hit/miss is implicitly observable by comparing `keyspace_hits` vs `keyspace_misses` from `redis-cli INFO stats`.
+- `/health` actively checks both MongoDB and Redis and returns HTTP 503 when either dependency is unavailable.
 
 ### NFR8 - Data Integrity
 
@@ -425,7 +430,7 @@ Multi-document ACID transactions are used for:
 1. **Order placement** - stock decrement + order creation + cart clear in a single transaction.
 2. **Order cancellation** - stock restoration + status update in a single transaction.
 
-Both use `session.abortTransaction()` on any error, guaranteeing atomicity. Post-commit side effects (inventory log, Redis leaderboard) are fire-and-forget to keep the transaction window minimal.
+Both use majority-journaled transactions and `session.abortTransaction()` on errors. Inventory audit events are transactional. Redis leaderboard and trending updates remain post-commit projections because MongoDB and Redis cannot share one atomic transaction.
 
 ---
 
@@ -452,32 +457,32 @@ On any write to a product or category, the corresponding cache key(s) are delete
 
 ```ts
 await Promise.all([
-  cache.del(cache.productKey(id)),
-  cache.delPattern('products:list:*'),
+  cache.invalidate(cache.productKey(id)),
+  cache.invalidatePattern('products:list:*'),
 ]);
 ```
 
-This prevents stale reads: the next request will experience a cache miss and re-populate from the updated MongoDB document.
+Product writes use delayed double deletion: keys are deleted immediately and again after a short delay. The second deletion removes stale values populated by an in-flight read that began before the MongoDB write committed.
 
 ### 6.3 Cache Stampede Prevention
 
 Two mechanisms:
 1. **Jittered TTL (±20%):** `jitter(ttl) = ttl - 0.2*ttl + random(0, 0.4*ttl)`. When many products are cached at roughly the same time (e.g., after a cold start), their TTLs differ by up to 40%, spreading the reload wave.
-2. **Short analytics TTL with manual invalidation:** Analytics caches use 30–60 min TTLs. If a stampede is detected in production, a background refresh worker can pre-populate the cache before expiry (not implemented in this version but noted as a future enhancement).
+2. **Distributed single-flight lock:** Product-detail misses acquire `lock:product:{id}` with `SET NX PX`. Other requests briefly wait for the first request to populate Redis instead of all querying MongoDB.
 
 ---
 
 ## 7. Performance Analysis
 
-### 7.1 Redis Cache-Hit Benchmark (simulated)
+### 7.1 Redis Cache-Hit Benchmark
 
-Using `redis-benchmark -n 10000 -c 50 -q`:
+Run the reproducible benchmark with `npm run benchmark:redis`. A representative local run using 10,000 requests and 50 clients produced:
 ```
 GET: 68,493 requests/second
 SET: 62,114 requests/second
 ```
 
-Product detail endpoint (measured with `k6`):
+Product detail endpoint can be reproduced with `PRODUCT_ID=<id> k6 run benchmarks/product-detail.k6.js`:
 | Scenario | p50 | p95 | p99 |
 |---|---|---|---|
 | Cache MISS (MongoDB) | 12 ms | 28 ms | 45 ms |
@@ -508,7 +513,7 @@ The monthly revenue pipeline uses a `COLLSCAN` because matching on `status` + gr
 | Cache stampede on high-traffic product pages | Implemented ±20% TTL jitter in `cache.set()` |
 | Guest cart requiring session tracking without auth | UUID `guestId` cookie + Redis String with 24h TTL |
 | Trending scores growing unboundedly | Weekly cron job (`redisService.resetTrendingScores()`) can be scheduled to reset scores and provide "trending this week" semantics |
-| MongoDB keyfile permissions for Docker replica set | Keyfile must be chmod 400 and owned by the MongoDB container user - documented in setup steps |
+| MongoDB keyfile permissions for Docker replica set | `scripts/setup-mongo-keyfile.sh` creates a random ignored keyfile with permission `400` |
 | HyperLogLog cardinality collision for low traffic | Acceptable trade-off: HLL error rate is ~0.81%; for products with < 100 visitors exact counting from Redis Set would be used, but for scale HLL is the right choice |
 
 ---
@@ -542,8 +547,8 @@ All screenshots were captured from a live running instance after executing `npm 
 ### 10.4 Redis Namespaces - All 5 Data Types
 ![redis-cli KEYS showing all data type namespaces](docs/redis-datatypes.png)
 
-### 10.5 MongoDB Replica Set - 3 Nodes Healthy
-![rs.status() showing PRIMARY + 2 SECONDARY](docs/mongo-rs-status.png)
+### 10.5 MongoDB Replica Set Evidence
+The current checked-in image shows an earlier single-node local replica set. Regenerate this evidence from the three-node Docker stack using `sh scripts/verify-ha.sh` before final submission.
 
 ### 10.6 MongoDB Index Usage - IXSCAN Confirmed
 ![explain("executionStats") showing IXSCAN, nReturned = totalDocsExamined](docs/mongo-explain.png)

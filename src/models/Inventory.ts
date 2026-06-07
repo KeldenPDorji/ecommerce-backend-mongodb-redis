@@ -23,7 +23,7 @@ const inventorySchema = new Schema<IInventory>(
       enum: ['sale', 'restock', 'adjustment', 'return', 'damage'],
       required: true,
     },
-    reference: { type: Schema.Types.ObjectId, refPath: 'Order' },
+    reference: { type: Schema.Types.ObjectId, ref: 'Order' },
     stockAfter: { type: Number, required: true, min: 0 },
     note: { type: String, maxlength: 500 },
   },

@@ -1,11 +1,13 @@
 import { Response } from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../services/token.service';
 import { sendWelcomeEmail } from '../services/email.service';
 import { AuthRequest } from '../middleware/auth';
+import { redisService } from '../services/redis.service';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 export const registerSchema = z.object({
@@ -27,6 +29,24 @@ const REFRESH_COOKIE_OPTS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
+async function createAuthSession(userId: string, role: string): Promise<{
+  sessionId: string;
+  accessToken: string;
+  refreshToken: string;
+}> {
+  const sessionId = randomUUID();
+  const accessToken = signAccessToken(userId, role, sessionId);
+  const refreshToken = signRefreshToken(userId, role, sessionId);
+
+  await redisService.setSession(sessionId, {
+    userId,
+    role,
+    createdAt: new Date().toISOString(),
+  });
+
+  return { sessionId, accessToken, refreshToken };
+}
+
 // ── Controllers ────────────────────────────────────────────────────────────
 export const register = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { name, email, password } = req.body as z.infer<typeof registerSchema>;
@@ -37,8 +57,7 @@ export const register = asyncHandler(async (req: AuthRequest, res: Response) => 
   const user = await User.create({ name, email, password });
   await sendWelcomeEmail(email, name);
 
-  const accessToken = signAccessToken(String(user._id), user.role);
-  const refreshToken = signRefreshToken(String(user._id), user.role);
+  const { accessToken, refreshToken } = await createAuthSession(String(user._id), user.role);
 
   await User.findByIdAndUpdate(user._id, { $push: { refreshTokens: refreshToken } });
 
@@ -54,8 +73,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
   }
 
-  const accessToken = signAccessToken(String(user._id), user.role);
-  const refreshToken = signRefreshToken(String(user._id), user.role);
+  const { accessToken, refreshToken } = await createAuthSession(String(user._id), user.role);
 
   // Rotate: keep last 5 refresh tokens (multi-device support)
   const tokens = [...user.refreshTokens.slice(-4), refreshToken];
@@ -80,14 +98,21 @@ export const refresh = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const user = await User.findById(payload.sub).select('+refreshTokens');
   if (!user || !user.refreshTokens.includes(token)) {
+    await redisService.deleteSession(payload.sid);
     throw new AppError('Refresh token reuse detected', 401, 'UNAUTHORIZED');
   }
 
-  const newAccess = signAccessToken(String(user._id), user.role);
-  const newRefresh = signRefreshToken(String(user._id), user.role);
+  const session = await redisService.getSession(payload.sid);
+  if (!session || session.userId !== payload.sub) {
+    throw new AppError('Session expired or revoked', 401, 'UNAUTHORIZED');
+  }
+
+  const newAccess = signAccessToken(String(user._id), user.role, payload.sid);
+  const newRefresh = signRefreshToken(String(user._id), user.role, payload.sid);
 
   const tokens = user.refreshTokens.filter((t) => t !== token).concat(newRefresh);
   await User.findByIdAndUpdate(user._id, { $set: { refreshTokens: tokens } });
+  await redisService.touchSession(payload.sid);
 
   res.cookie('refreshToken', newRefresh, REFRESH_COOKIE_OPTS);
   res.json({ success: true, accessToken: newAccess });
@@ -98,6 +123,7 @@ export const logout = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (token) {
     await User.findByIdAndUpdate(req.userId, { $pull: { refreshTokens: token } });
   }
+  if (req.sessionId) await redisService.deleteSession(req.sessionId);
   res.clearCookie('refreshToken');
   res.json({ success: true, message: 'Logged out' });
 });
