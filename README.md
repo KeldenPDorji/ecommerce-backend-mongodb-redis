@@ -80,8 +80,8 @@ A production-ready REST API for an online retail platform built with **Node.js**
 ## Prerequisites (local dev without Docker)
 
 - Node.js ≥ 20
-- MongoDB running locally - `brew services start mongodb-community@8.0`
-- Redis running locally - `brew services start redis`
+- MongoDB ≥ 8 (must run as a replica set — required for ACID transactions)
+- Redis running locally
 
 ---
 
@@ -93,12 +93,19 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env - change the two JWT secrets (min 32 chars each)
+# Edit .env — set MONGODB_URI=mongodb://127.0.0.1:27017/ecommerce?replicaSet=rs0
+# Change the two JWT secrets (min 32 chars each)
 
-# 3. Seed the database
+# 3. Start MongoDB as a single-node replica set
+mongod --dbpath /tmp/mongodb-data --replSet rs0 --fork \
+  --logpath /tmp/mongodb-logs/mongod.log
+# First time only: initialise the replica set
+mongosh --eval "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] })"
+
+# 4. Seed the database
 npm run seed
 
-# 4. Start in development (tsx watch)
+# 5. Start in development (tsx watch)
 npm run dev
 ```
 
@@ -294,3 +301,15 @@ After running `npm run seed`:
 - Production error responses omit stack traces
 - All sensitive schema fields use `select: false`
 - Redis `volatile-ttl` eviction policy - cache keys evicted first, critical keys preserved
+
+---
+
+## Team Members
+
+| # | Name |
+|---|---|
+| 1 | Kelden Phuntsho Dorji |
+| 2 | Kinley Palden |
+| 3 | Tshering Wangpo Dorji |
+| 4 | Sonam Dorji Galley |
+| 5 | Dechen Wangdra Sherpa |
